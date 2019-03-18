@@ -85,12 +85,17 @@ class Analyze1D(bases.CSVLoader):
         #average = np.average([th1, th2])
         #rnge = abs(th1-th2)
         for a in self.data:
+            self.data[a]['cherenkov'] = {}
             print("Finding angle for a =", a)
-            wl1, th1, _ = self._interp_angle(250e-9, a, band)
-            wl2, th2, _ = self._interp_angle(500e-9, a, band)
-            average = np.average([th1, th2])
+            wl1, th1, i1 = self._interp_angle(250e-9, a, band)
+            wl2, th2, i2 = self._interp_angle(500e-9, a, band)
+            th = self.data[a]['angle']
+            average = np.average(th[i1:i2])
             rnge = abs(th1-th2)
             array = np.array([[wl1, wl2, average, rnge, float(a)]])
+            self.data[a]['cherenkov']['error'] = rnge
+            self.data[a]['cherenkov']['angle'] = average
+
             if filename is not None:
                 try:
                     matrix = np.loadtxt(filename, ndmin=2) #force 3,1 shape for single array in file
@@ -128,7 +133,7 @@ class Analyze1D(bases.CSVLoader):
         angle = self.data[a]['angle'][band][i-1:j+1]
 
         ax = fig.add_subplot(111)
-        wl = np.array(w)*1e9
+        wl = np.array(wl)*1e9
         ax.plot(angle, wl, color='black', marker='o', markersize=5)
         title = r"Saturated Cherenkov Angle against Wavelength (Cropped to 250-500nm)"
         if modelname is None: modelname = self.path
@@ -142,7 +147,7 @@ class Analyze1D(bases.CSVLoader):
         else:
             fig.show()
     
-    def full_plot(self, filename=None, modelname=None, a_i=0, key=None):
+    def full_plot(self, filename=None, modelname=None, a_i=0, key=None, dump=False):
         """Plot wavelength against angle in full wavelength and angle range for a_ith unit cell size
 
         Params:
@@ -169,7 +174,6 @@ class Analyze1D(bases.CSVLoader):
             color='black', label="band "+str(b+1) ) #linestyle='None', #color='black'
             ax.legend()
             #print(a)
-            if max(th) > max_th: max_th = max(th) #unused I think
         title = r"Saturated Cherenkov Angle against Wavelength"
         if modelname is None: modelname = self.path
         title += "\n (" + modelname + ")"

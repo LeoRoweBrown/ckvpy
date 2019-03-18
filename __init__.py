@@ -1,4 +1,4 @@
-from . import bases
 from . import analyze1D
-#from . import intercept
+from . import dispersion
+__all__ = [analyze1D, dispersion]
 
