@@ -53,11 +53,10 @@ class Dispersion3D(bases.Bzone2D):
 
             z_array = mz.T[0][-1:1:-1]  # starts at maximum
             rho_array = mi[0][1:-1] # cut off edges (interp)
-            y_array = my[0][1:-1]
-            x_array = mx[0][1:-1]
 
             # e_plane = self.data[band]['mj']*3.e8*v
             mf *= 2*np.pi  # omega=2pif
+            mf = mf.T # transposed z?
             self.data[band]['crossings'] = \
                 {'ke': None, 'ko': None, 'f': None, 'direction': direction}
         # we are working to intersect in z direction, so loop over mj
@@ -67,8 +66,8 @@ class Dispersion3D(bases.Bzone2D):
             kz_c = np.array([])
             k_rho_c = np.array([])
             f_c = np.array([])
-            print(z_array)
-            print(rho_array)
+            # print(z_array)
+            # print(rho_array)
             for kz_i, kz in enumerate(z_array[:-1]):
                 for k_rho_i, k_rho in enumerate(rho_array[:-1]):
                     kz2 = z_array[kz_i + 1]
@@ -111,8 +110,6 @@ class Dispersion3D(bases.Bzone2D):
         #     fz_cross = f
         #     f_rho_cross = f
         # else:
-        if kz2 > 1.e8 or kz > 1.e8:
-            print(kz2,kz)
 
         cz = f - m_z*kz
         c_rho = f - m_rho*k_rho
@@ -161,6 +158,8 @@ class Dispersion3D(bases.Bzone2D):
             if k_bounds and f_bounds:
                 # print("found crossing in _find_cross for z")
                 z_found = True
+                if kz_cross < 0:
+                    print(kz_cross)
             else:
                 z_found = False
         
@@ -198,16 +197,15 @@ class Dispersion3D(bases.Bzone2D):
         for band in self.data:
             print("Band", band + ":")
             kz = self.data[band]['crossings']['kz']
-            print("max",np.max(kz))
             k_rho = self.data[band]['crossings']['k_rho']
             f = self.data[band]['crossings']['f']
             adj_for_e_diretion = np.arctan(dz/(dr+1e-20))
             print(adj_for_e_diretion)
             theta = np.arctan(kz/(k_rho+1e-20)) - adj_for_e_diretion
             wl = 2*np.pi*3.e8/f*1e9
-            print(kz)
-            print(k_rho)
-            print(wl)
+            # print(kz)
+            # print(k_rho)
+            # print(wl)
             print(theta)
             pos_th, pos_wl, mean, err = \
                 self._calc_err(theta, wl)
@@ -248,8 +246,6 @@ class Dispersion3D(bases.Bzone2D):
             print("None found")
         return theta_2_5nm, wl_2_5nm, mean, err
 
-
-
     def plot3D(self, mode='surface'):
         print("Reflecting")
         self.reflect()
@@ -284,7 +280,8 @@ class Dispersion3D(bases.Bzone2D):
                 #surf = ax.plot_surface(mi, mj, mi*3.e8, cmap=cm.bwr,
                 #                       linewidth=0, antialiased=False)
             elif mode == 'scatter':
-                ax.scatter(self.data['1']['k_rho'], self.data['1']['kz'], self.data['1']['frequency'])
+                # ax.scatter(self.data['1']['k_rho'], self.data['1']['kz'], self.data['1']['frequency'])
+                ax.scatter(mi, mj, mf)
             # plane = ax.plot_surface(mi, mj, mj*0.9*3.e8*np.pi/a, cmap=cm.coolwarm,
             #                 linewidth=0, antialiased=False)
                
