@@ -24,7 +24,9 @@ class Analyze1D(bases.CSVLoader):
 
     def load_mat(self, matrixfile):
         try:
-            self.a_matrix = np.loadtxt(matrixfile, ndmin=2)
+            matrix = np.loadtxt(matrixfile, ndmin=2)
+            for row, a in enumerate(self.data):
+                self.data[a]['cherenkov'] = matrix[row]
         except IOError:
             raise IOError(
                 "No such file, generate data using get_angle with dump=True and filename=<filename> "
@@ -84,30 +86,34 @@ class Analyze1D(bases.CSVLoader):
         #th2, j = self._interp_angle(500e-9, band=band, a=a)
         #average = np.average([th1, th2])
         #rnge = abs(th1-th2)
+        self.a_matrix = np.array([]).reshape(0,5) 
         for a in self.data:
-            self.data[a]['cherenkov'] = {}
             print("Finding angle for a =", a)
             wl1, th1, i1 = self._interp_angle(250e-9, a, band)
             wl2, th2, i2 = self._interp_angle(500e-9, a, band)
-            th = self.data[a]['angle']
+            th = self.data[a]['angle'][band]
             average = np.average(th[i1:i2])
             rnge = abs(th1-th2)
             array = np.array([[wl1, wl2, average, rnge, float(a)]])
-            self.data[a]['cherenkov']['error'] = rnge
-            self.data[a]['cherenkov']['angle'] = average
+            self.data[a]['cherenkov'] = array.tolist()  # json friendly
+            # redundant due to the two lines, but still used in a_plot TODO
 
             if filename is not None:
                 try:
-                    matrix = np.loadtxt(filename, ndmin=2) #force 3,1 shape for single array in file
+                    matrix = np.loadtxt(filename, ndmin=2) 
                     if min([float(a) - line[-1] for line in matrix]) < 1e-12:
-                        array=np.array([]).reshape(0,5) # duplicate so make array empty (not tested)
+
+                        # duplicate so make array empty
+                        array=np.array([]).reshape(0,5) 
                         print("Duplicates found, not replacing")
                     #print(matrix.shape)
                     #self.path[:-4]+"_a.txt"
                 except:
+                    #force 0,5 shape for single array in file
                     matrix = np.array([]).reshape(0,5)
                 np.savetxt(filename, np.concatenate((matrix, array), axis=0))
-                self.a_matrix = np.concatenate((matrix, array), axis=0)
+
+        # print(self.data[a]['cherenkov'])
         if len(self.file_suffix) == 1: return average, rnge 
         return # dont return average and range if computed for multiple values of 'a', these are stored in file.
 
@@ -192,33 +198,42 @@ class Analyze1D(bases.CSVLoader):
         else:
             fig.show()
 
-    def a_plot(self, filename=None, modelname=None):
+    def a_plot(self, filename=None, modelname=None, band=0):
         """Plot 'a' against Cherenkov angle and chromatic error
         Params:
         filename (str): Filename of exported graph
         modelname (str): String appended to title to distinguish graphs of different models
         """
-        wl1, wl2, angle, err, a = self.a_matrix.T
+        # matrix of data
+        lists = [ np.array([None]*len(self.data)) for _ in self.data]
+        wl1, wl2, angle, err, a, = \
+            lists[0], lists[1], lists[2], lists[3], lists[4]
+
+        for i, a_key in enumerate(self.data):
+            wl1[i], wl2[i], angle[i], err[i], a[i] = \
+                self.data[a_key]['cherenkov'][band]
+            print(self.data[a_key]['cherenkov'][band])
+            print(angle[i])
         # exclude different wavelength ranges?
         #print(angle, err, a)
         fig = plt.figure(figsize = (10,8))
         ax = fig.add_subplot(111)
         #ax.plot(a, angle)
-        ax.errorbar(x=a, y=angle, yerr=err/2, color='black', capsize=5, marker='o', markersize=5) # error divided by 2 for errorbar
-        title = r"Saturated Cherenkov Angle Against Unit Cell Size" # + str(np.round(wl1*1e9,3)) + r"-"+ str(np.round(wl2*1e9,3)
+        print(angle)
+        ax.errorbar(x=a, y=angle, yerr=err/2., color='black', capsize=5,\
+            marker='o', markersize=5) # error divided by 2 for errorbar
+        title = r"Saturated Cherenkov Angle Against Unit Cell Size"
         if modelname is None: modelname = self.path
-        title += " (" + modelname + ")"
+        title += "\n (" + modelname + ")"
 
         ax.set_title(title)
         ax.set_xlabel("Unit cell dimension")
         ax.set_xlabel(r"Unit cell dimension $a$ (m)")
-        print(np.shape(angle))
-        print(np.shape(err))
 
         ax.set_ylabel(r"Average Saturated Cherenkov Angle $\theta_c$ (rad)")
-        print("Saving as", filename)
         fig.show()
         if filename is not None:
+            print("Saving as", filename)
             fig.savefig(filename, bbox_inches='tight')
         else:
             fig.show()

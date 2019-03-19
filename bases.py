@@ -185,15 +185,18 @@ class CSVLoader(object):
         for root in self.data:
             for b in range(self.num_bands[root]):
                 data = self.data[root]
-                if b in data[key]:
-                    sort_index = np.argsort(data[key][b])
-                    if direction == -1:
-                        sort_index = sort_index[:-1]
+                # print("Sorting", key)
+                sort_index = np.argsort(data[key][b])
+                if direction == -1:
+                    sort_index = sort_index[:-1]
                 else:  continue
 
                 for param in self.data[root]:
-                    self.data[root][param][b] = \
-                    [data[param][b][ind] for ind in sort_index]
+                    # check same data length
+                    if len(self.data[root][param][b]) == \
+                        self.data[root][key][b]:
+                            self.data[root][param][b] = \
+                            [data[param][b][ind] for ind in sort_index]
 
     def save_data(self, name):
         with open(name, 'w') as f:
