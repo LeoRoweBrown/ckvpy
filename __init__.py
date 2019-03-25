@@ -1,4 +1,6 @@
 from . import analyze1D
 from . import dispersion
-__all__ = [analyze1D, dispersion]
+from . import tools
+
+__all__ = [analyze1D, dispersion, tools]
 
