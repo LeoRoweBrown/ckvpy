@@ -220,6 +220,8 @@ class Bzone2D(CSVLoader):
         self.ndim = ndim
         self.symmetry = symmetry
         self.reflected = False
+        self.status = {'reflected': False, 'interpolated':False, \
+            'intersected': False}
 
         for header in headers:
             if header not in \
@@ -302,7 +304,7 @@ class Bzone2D(CSVLoader):
         start_angle (int) Angle (DEGREES) in BZ that data starts at in
             degrees, assumed to be minimum angle
         """
-        if self.reflected is True:
+        if self.status['reflected']:
             print("Already reflected!")
             return
         # transformations of angle, first number is multiplier, second is addition
@@ -326,12 +328,12 @@ class Bzone2D(CSVLoader):
             raise ValueError("Please pick symmetry order 4 or 8")
 
         self._convert_to_polar()
+
         for band in self.data:
             start_angle = np.min(self.data[band]['k_theta']) 
             if abs(start_angle) > 1e-10:
                 raise ValueError("Please only use data that starts"
                     "from 0 degrees")
-            self._convert_to_polar()
             #print(band)
             for params in reflections:
                 new_angles = params[0]*np.array(self.data[band]['k_theta']) \
@@ -363,11 +365,14 @@ class Bzone2D(CSVLoader):
                     np.cos(self.data[band]['k_theta'])
                 self.data[band]['ky'] = self.band[band]['k_abs']*\
                     np.sin(self.data[band]['k_theta'])
-        self.reflected = True
+        self.status['reflected'] = True
 
-    def interpolate(self, resolution=100):
+    def interpolate(self, resolution=100, method='cubic'):
         """ work directly in k space with k values (not fraction of brillouin
         zone) """
+        if not self.status['reflected']:
+            self.reflect(self.symmetry)
+
         for band in self.data:
             if self.ndim == 3:
                 ki_data = self.data[band]['k_rho']
@@ -378,6 +383,9 @@ class Bzone2D(CSVLoader):
                 kj_data = self.data[band]['ky']
 
             f_data = self.data[band]['frequency']
+
+            print("Hard zeroes in data?", 0 in f_data)
+            print("NaNs in data?", math.nan in f_data)
             ki_max = np.max(ki_data)
             ki_min = np.min(ki_data)
             kj_max = np.max(kj_data)
@@ -393,7 +401,6 @@ class Bzone2D(CSVLoader):
 
             # outside of convex hull the values are NaN, so replace these with
             # nearest neighbour
-            method = 'cubic'
             interpolate_hull = interpolate.griddata((ki_data,\
                 kj_data), f_data, (mi,mj), method=method)
             fill_matrix = interpolate.griddata((ki_data,\
@@ -414,10 +421,10 @@ class Bzone2D(CSVLoader):
             self.data[band]['my'] = \
                 mi*np.sin(phi)
             self.data[band]['mz'] = mj
-
             self.data[band]['mf'] = mf
             self.data[band]['mi'] = mi
             self.data[band]['mj'] = mj
+        self.status['interpolated'] = True
 
     def addzero(self, band):
         """Add point f(k=0) = 0 to help interpolation"""
@@ -426,40 +433,13 @@ class Bzone2D(CSVLoader):
         self.data[band]['ky'].append(0.0)
         self.data[band]['kz'].append(0.0)
 
-    def replacenans(self):
-        """Replace NaNs and replace with extrapolation of key_y data based on key_x data as the independent variable,
-        i.e. delta(y)/delta(x) gives gradient which is used to extrapolate."""
-        key_y = None
-        key_x = None
-        raise NotImplementedError
-        #  unneccessary because of interpolation? Will replace NaNs automatically
-        for root in self.data:
-            y = self.data[root][key_y]
-            x = self.data[root][key_x]
-            for band in self.data[root]:
-                i = 1
-                isnan = False
-                reverse = 0
-                while(not math.isnan(band[i])):
-                    if reverse > 1:
-                        raise ValueError("Already attempted to reverse data, cannot interpolate NaNs automatically.")
-                    j = 0
-                    while (x[i]-x[i-1]) < 1.e-15*(y[i]-y[i-1] and i-j > 0): # deal with divide by zero
-                        grad = (y[i]-y[i-j])/(x[i]-x[i-j]) # find gradient between two points further and further apart
-                        j += 1 # until reach beginning of data
-                        if i-j < 0: 
-                            raise Warning("""Unable to interpolate (due to gradient) for NaN replacement, trying to
-                            switch axes""")
-                            reverse += 1
-                            self.sort_data(key_y, direction=-1)
-
-                    grad = (y[i]-y[i-1])/(x[i]-x[i-1])
-                    if math.isnan(grad):
-                        raise Warning("""gradient for interpolation is NaN, data probably starts with NaN, trying to
-                        call sort_data(<key>, direction=-1) to reverse order""")
-                        self.sort_data(key_y, direction=-1)
-                        reverse += 1
-                    i += 1
-                    isnan =  math.isnan(band[i])
-                # now we replace the NaN at index i
-                self.data[root][key_y][i] = y[i-1] + grad*(x[i]-x[i-1])
+    def _removerawnans(self):
+        """Attempt to fix interpolation with missing data by
+        removing data points with NaNs"""
+        for band in self.data:
+            for i, f in enumerate(self.data[band]['frequency']):
+                if math.isnan(f):
+                    for param in self.data[band]:
+                        if len(self.data[band][param]) == \
+                            len(self.data[band]['frequency']):
+                                np.delete(self.data[band][param], i)
