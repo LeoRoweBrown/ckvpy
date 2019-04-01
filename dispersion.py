@@ -5,10 +5,11 @@ from scipy import interpolate
 from matplotlib import pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D
 from matplotlib import cm
-from . import bases
-from .tools import effective
 
-class Dispersion3D(bases.Bzone2D):
+import ckvpy.tools.effective as effective
+from ckvpy.tools.bz2d import Bzone2D
+
+class Dispersion3D(Bzone2D):
     """Intersect 2D band structure with electron plane. Can be used for 3D 
     data or 2D data, but 3D data must be confined to a 2D plane which at
     the moment is constrained to just planes in k_rho,kz where 
@@ -19,7 +20,11 @@ class Dispersion3D(bases.Bzone2D):
                 'frequency', 'kx', 'ky', 'kz', 'n', 'skip'], sort_by = 'band',
                 ndim=3, reflect=True, interpolate=True, removenans=True):
 
-        plt.rcParams.update({'font.size': 14})
+        # plt.rcParams.update({'font.size': 14})
+        plt.rcParams["font.family"] = "serif"
+        plt.rcParams["mathtext.fontset"] = "dejavuserif"
+        plt.rcParams['font.size'] = 14
+        plt.rcParams['axes.axisbelow'] = True
         np.set_printoptions(precision=3) # will this affect data saved to text?
         self.ndim = ndim
         for header in headers:
@@ -39,7 +44,8 @@ class Dispersion3D(bases.Bzone2D):
         if removenans:
             self._removerawnans()
 
-    def _intersect(self, v=0.999, direction = [1,0]):
+    def calculateCherenkov(self, v=0.999, direction = [1,0], \
+                          wl_range=[250.e-9,500.e-9]):
         """course intersection, then fine by looking in neighbourhood. 
         Do this by interpolating between lines?
         Electron direciton parameterised by direction
@@ -47,13 +53,14 @@ class Dispersion3D(bases.Bzone2D):
             v (float): electron speed
             direction (list): determines direction of electron with idices
                 rho (|x,y|) and z which defines e-plane omega = k.v
+            wl_range list[int/float, int/float]: range of wavelength in nm
         """
         # raise NotImplementedError
         if not self.status['interpolated']:
             print("Not already interpolate, using default resolution and"
                   "interpolating")
             self.interpolate()
-            
+
         for band in self.data:
             m_rho = self.data[band]['mi']  # matrix of k_rho values
             mz = np.copy(self.data[band]['mz'])  # mutated so copy
@@ -96,9 +103,14 @@ class Dispersion3D(bases.Bzone2D):
                         f_c = np.append(f_c, f_rho_cross)
             self.data[band]['crossings']['kz'] = kz_c
             self.data[band]['crossings']['k_rho'] = k_rho_c
-            self.data[band]['crossings']['f'] = f_c
+            self.data[band]['crossings']['frequency'] = f_c
+            if len(self.data[band]['crossings']['kz']) == 0:
+                raise Warning("No intersection found between electron plane "
+                            "and dispersion plane,")
+            self.analyze(band, wl_range)
+
         self.status['intersected'] = True
-            
+
     def _cross(self, v, kz, kz2, k_rho, k_rho2, f, fz2,
                f_rho2, direction):
         """Find crossings between electron plane in omega=v_z*kz+v_rho*k_rho
@@ -108,7 +120,7 @@ class Dispersion3D(bases.Bzone2D):
         Args: 
             v (float): speed as percentage of c
             direction (list): from 0 to 1, component in rho and z direciton 
-                respectively in form of [float, float]
+                respectively in form [float, float] ([1,1] -> velocity=(v,v))
             kz, kz2, k_rho, k_rho2 (float): ith and i+1th value of kz/k_rho
                 in ascending order
             f (float): value of frequency at kz k_rho
@@ -174,61 +186,35 @@ class Dispersion3D(bases.Bzone2D):
         
         return rho_found, rho, z_found, z
 
-    def plotCherenkov(self, nm_range=[250,500], v=0.999, direction = [1,0]):
-        """Plot Angle against Wavelength and Scatter plot of intersection"""
-        if not self.status['intersected']:
-            self._intersect(v, direction)
-        fig = plt.figure(figsize=(10,8))  # Cherenkov plot
-        fig1 = plt.figure(figsize=(10,8))  # 3D scatter plot
+    def analyze(self, band, wl_range):
+        kz = self.data[band]['crossings']['kz']
+        k_rho = self.data[band]['crossings']['k_rho']
+        f = self.data[band]['crossings']['frequency']
+        d_rho, dz = self.data[band]['crossings']['direction']
+        adj_for_e_diretion = np.arctan(dz/(d_rho+1e-20))
+        theta = np.arctan(kz/(k_rho+1e-20)) - adj_for_e_diretion
+        wl = 2*np.pi*3.e8/f
+        pos_th, pos_wl, mean, err = \
+            self._calc_err(theta, wl, wl_range)
+        neg_th, neg_wl, neg_mean, neg_err = \
+            self._calc_err(theta, wl, wl_range, sign=-1)
+        self.data[band]['crossings']['theta'] = theta
+        self.data[band]['crossings']['pos'] = {'theta': pos_th}
+        self.data[band]['crossings']['pos']['wavelength'] = pos_wl
+        self.data[band]['crossings']['pos']['error'] = err
+        self.data[band]['crossings']['pos']['average'] = mean
+        self.data[band]['crossings']['neg'] = {'theta': neg_th}
+        self.data[band]['crossings']['neg']['wavelength'] = neg_wl
+        self.data[band]['crossings']['neg']['error'] = neg_err
+        self.data[band]['crossings']['neg']['average'] = neg_mean
+        self.data[band]['crossings']['wavelength'] = wl
+        # volume ratio xy plane
+        v_r = (np.pi*(0.45*(3**0.5))**2)/(3*3**0.5/2)
+        # volume ratio z direction
+        v_rz = 2./3.
+        self.compare_sio2(ratio_2d=v_r, ratio_3d=v_rz)
 
-        d_rho, dz = self.data['1']['crossings']['direction']
-        kz_axis = r"$k_z \,(m^{-1})$"
-        k_rho_axis = r"$k_{\rho} \,(m^{-1})$"
- 
-        ax = fig.add_subplot(1,1,1)
-        fig.tight_layout()
-        ax.set_xlabel(r" Cherenkov Angle $\theta_c$ (rad)")
-        ax.set_ylabel(r"Wavelength $\lambda$ (m)")
-        ax.set_ylim([0,600])  # wavelength range
-        ax.set_title("Wavelength against Cherenkov Angle (+ve) \n Derived from 2D Dispersion")
-
-        ax1 = fig1.add_subplot(1,1,1, projection='3d')
-        ax1.set_title("Intersection Points Between Electron Plane \n and 2D Dispersion")
-        ax1.set_xlabel(k_rho_axis)
-        ax1.set_ylabel(kz_axis)
-        ax1.set_zlabel(r"Frequency (Hz)")
-
-        for band in self.data:
-            print("Band", band + ":")
-            kz = self.data[band]['crossings']['kz']
-            k_rho = self.data[band]['crossings']['k_rho']
-            f = self.data[band]['crossings']['f']
-            adj_for_e_diretion = np.arctan(dz/(d_rho+1e-20))
-            theta = np.arctan(kz/(k_rho+1e-20)) - adj_for_e_diretion
-            wl = 2*np.pi*3.e8/f*1e9
-            pos_th, pos_wl, mean, err = \
-                self._calc_err(theta, wl, nm_range)
-            neg_th, neg_wl, neg_mean, neg_err = \
-                self._calc_err(theta, wl, nm_range, sign=-1)
-
-            ax.plot(theta, wl, linestyle='None', marker='o', color='black')
-            ax.set_xticks(np.arange(0,0.4+0.004, 0.05))  # angle
-            ax.set_xlim([0, max(pos_th)+0.05])
-            global_max = max([np.max(kz), np.max(k_rho)])
-            ax1.set_ylim([-global_max, global_max])
-            ax1.set_xlim([-global_max, global_max])
-            ax1.invert_xaxis()  # reversing for viewing ease
-            ax1.scatter(k_rho, kz, f, color='black')
-            self.data[band]['crossings']['theta'] = theta
-            self.data[band]['crossings']['wavelength'] = wl
-            self.data[band]['crossings']['error'] = err
-
-        fig.savefig("cherenkov.png", bbox_inches='tight')
-        fig1.savefig("intersection.png", bbox_inches='tight')
-        fig.show()
-        fig1.show()
-    
-    def _calc_err(self, theta, wl, nm_range, sign=1):
+    def _calc_err(self, theta, wl, wl_range, sign=1):
         """Find chromatic error and remove negative/positive angles between
         for wavelengths between 250nm and 500nm.
         Args:
@@ -248,7 +234,7 @@ class Dispersion3D(bases.Bzone2D):
         mean = None
         err = None
         for i, w in enumerate(wl):
-            if w < nm_range[1] and w > nm_range[0] and sign*theta[i]>0:
+            if w < wl_range[1] and w > wl_range[0] and sign*theta[i]>0:
                 wl_nm_range.append(w)
                 theta_nm_range.append(theta[i])
         try:
@@ -259,6 +245,54 @@ class Dispersion3D(bases.Bzone2D):
         except ValueError:
             print("None found")
         return theta_nm_range, wl_nm_range, mean, err
+
+    def plotCherenkov(self):
+        """Plot Angle against Wavelength and Scatter plot of intersection"""
+        if not self.status['intersected']:
+            print("Cherenkov angle has not been calculated, please use "
+                  "calculateCherenkov(v=<speed>, direction=<[rho, z]>")
+            return
+        fig = plt.figure(figsize=(10,8))  # Cherenkov plot
+        fig1 = plt.figure(figsize=(10,8))  # 3D scatter plot
+
+        kz_axis = r"$k_z \,(m^{-1})$"
+        k_rho_axis = r"$k_{\rho} \,(m^{-1})$"
+ 
+        ax = fig.add_subplot(1,1,1)
+        fig.tight_layout()
+        ax.set_xlabel(r" Cherenkov Angle $\theta_c$ (rad)")
+        ax.set_ylabel(r"Wavelength $\lambda$ (m)")
+        ax.set_ylim([0,600])  # wavelength range
+        ax.set_title("Wavelength against Cherenkov Angle (+ve) \n Derived from 2D Dispersion")
+
+        ax1 = fig1.add_subplot(1,1,1, projection='3d')
+        ax1.set_title("Intersection Points Between Electron Plane \n and 2D Dispersion")
+        ax1.set_xlabel(k_rho_axis)
+        ax1.set_ylabel(kz_axis)
+        ax1.set_zlabel(r"Frequency (Hz)")
+
+        for band in self.data:
+            print("Band", band + ":")
+            th = self.data[band]['crossings']['theta']
+            th_pos = self.data[band]['crossings']['pos']['theta']
+            wl = self.data[band]['crossings']['wavelength']
+            kz = self.data[band]['crossings']['kz']
+            k_rho = self.data[band]['crossings']['k_rho']
+            f = self.data[band]['crossings']['frequency']
+
+            ax.plot(th, wl*1e9, linestyle='None', marker='o', color='black')
+            ax.set_xticks(np.arange(0,0.4+0.004, 0.05))  # angle
+            ax.set_xlim([0, max(th_pos)+0.05])
+            global_max = max([np.max(kz), np.max(k_rho)])
+            ax1.set_ylim([-global_max, global_max])
+            ax1.set_xlim([-global_max, global_max])
+            ax1.invert_xaxis()  # reversing for viewing ease
+            ax1.scatter(k_rho, kz, f, color='black')
+
+        fig.savefig("cherenkov.png", bbox_inches='tight')
+        fig1.savefig("intersection.png", bbox_inches='tight')
+        fig.show()
+        fig1.show()
 
     def plot3d(self, mode='surface'):
 
@@ -286,6 +320,7 @@ class Dispersion3D(bases.Bzone2D):
             ax.set_xlabel(r"Wavevector in $(k_x,k_y)$, $k_{\rho}$ $(m^{-1})$")
             ax.set_ylabel(r"Wavevector $k_z$ $(m^{-1})$")
             ax.set_zlabel(r"Frequency $(Hz)$")
+
             ax.invert_xaxis()
             print('rho', np.max(m_rho), 'z', np.max(mz))
             if mode == 'surface':
@@ -304,69 +339,13 @@ class Dispersion3D(bases.Bzone2D):
             fig.savefig("dispersion"+band+".png", bbox_inches='tight')
             fig.show()
 
-    def compare_medium(self, index="sio2", nm_range = [250, 500]):
-        """Compare expected refractive index/Cherenkov angle from 
-        Maxwell-Garnett formula to data from simulation.
-        Args:
-            index (str): material refractive index in ./index/<index>.txt
-                used to calculate expected index from effective medium.
-        """
-        print("Reading from", __file__)
-        index_file = os.path.join(os.path.dirname(__file__),\
-            "index\\"+ index + ".txt")
+    def compare_sio2(self, ratio_2d, ratio_3d, index="sio2"):
         if not self.status['intersected']:
-            self._intersect(v, direction)
-        wl_sio2, n_sio2 = np.loadtxt(index_file).T
+            print("Cherenkov angle has not been calculated, please use "
+                  "calculateCherenkov(v=<speed>, direction=<[rho, z]>")
+            return
         for band in self.data:
-            th = self.data[band]['crossings']['theta']
-            wl = self.data[band]['crossings']['wavelength']*1e-9
-            err = self.data[band]['crossings']['error']
-            ind = np.argsort(wl)
-            wl = np.array([wl[i] for i in ind])
-            th = np.array([th[i] for i in ind])
-            n_sio2_interp = np.interp(wl, wl_sio2, n_sio2)
-            e_sio2 = n_sio2_interp*n_sio2_interp
-            # volume ratio 2d
-            v_r = (np.pi*(0.45*(3**0.5))**2)/(3*3**0.5/2)
-            # volume ratio z direction
-            v_rz = 2./3.
-            eff_2d = effective.index(e_sio2, 1.0, v_r)  # 2d slab
-            eff = effective.index(eff_2d, 1.0, v_rz)  # full 3d
-            n_eff = eff**0.5  # n = sqrt(eps)
-            n_data = 1./np.cos(th)  # Cherenkov formula
-            th_eff = np.arccos(1./n_eff)
-            n_err_p = abs(1./np.cos(th + np.ones_like(th)*err) - n_data)
-            n_err_n = abs(1./np.cos(th - np.ones_like(th)*err) - n_data)
-            fig = plt.figure(figsize=(10,8))
-            ax = fig.add_subplot(111)
-            ax.plot(wl*1e9, n_eff, label="Effective medium theory", \
-                color='black', linestyle='dotted', marker='*', markersize=6)
-            ax.plot(wl*1e9, n_data,
-                label="Simulation", color='black', marker='o',\
-                markersize=6)
-            ax.set_xlim([np.min(wl),1000])
-            # ax.set_ylim([np.min(n_eff)-0.005, np.max(n_data)+0.005])
-            ax.set_ylim([np.min(n_eff)-0.005, 1.07])
-
-            ax.set_title("Effective Index Comparison Between Theory and Simulation")
-            ax.set_xlabel(r"Wavelength $\lambda$ (nm)")
-            ax.set_ylabel(r"Refractive index $n_{eff}$")
-            ax.legend()
-            ax.axvline(nm_range[0], linestyle='dashed', color='black')
-            ax.axvline(nm_range[1], linestyle='dashed', color='black')
-            ax1 = ax.twinx() # fig.add_subplot(212)
-            ax1.set_xlim([np.min(wl),1000])
-            plt.grid()
-
-            # ax1.set_ylim([np.arccos(1./(np.min(n_eff)-0.005)), np.arccos(1./(np.max(n_data)+0.005))])
-            ax1.set_ylim([np.arccos(1./(np.min(n_eff)-0.005)),\
-                np.arccos(1./1.07)])
-            ax1.set_yticks(np.arange(np.arccos(1./(np.min(n_eff)-0.005)), \
-                np.arccos(1./1.07), 0.005))
-
-            ax1.set_xlabel(r"Wavelength $\lambda$ (nm)")
-            ax1.set_ylabel(r"Saturated Cherenkov Angle $\theta_c$ (rad)")
-            fig.savefig("effective_index.png")
-            fig.show()
-
-    
+            wl = self.data[band]['crossings']['wavelength']
+            th = self.data[band]['crossings']['angle']
+            effective.compare_medium(th, wl, ratio_2d, ratio_3d, index=index,
+                                    band=band)
