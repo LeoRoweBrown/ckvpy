@@ -1,12 +1,17 @@
+# TODO: Add filename options for plots
+
 import numpy as np 
 import csv
 import os
+import math
 from scipy import interpolate
 from matplotlib import pyplot as plt
+from matplotlib import ticker
 from mpl_toolkits.mplot3d import Axes3D
 from matplotlib import cm
 
 import ckvpy.tools.effective as effective
+from ckvpy.tools.yield
 from ckvpy.tools.bz2d import Bzone2D
 
 class Dispersion3D(Bzone2D):
@@ -54,6 +59,7 @@ class Dispersion3D(Bzone2D):
             direction (list): determines direction of electron with idices
                 rho (|x,y|) and z which defines e-plane omega = k.v
             wl_range list[int/float, int/float]: range of wavelength in nm
+                to analyse Cherenkov angle and chromatic error over
         """
         # raise NotImplementedError
         if not self.status['interpolated']:
@@ -107,9 +113,9 @@ class Dispersion3D(Bzone2D):
             if len(self.data[band]['crossings']['kz']) == 0:
                 raise Warning("No intersection found between electron plane "
                             "and dispersion plane,")
-            self.analyze(band, wl_range)
-
-        self.status['intersected'] = True
+            self.status['intersected'] = True
+            self.analyze_error(band, wl_range)
+        
 
     def _cross(self, v, kz, kz2, k_rho, k_rho2, f, fz2,
                f_rho2, direction):
@@ -186,14 +192,20 @@ class Dispersion3D(Bzone2D):
         
         return rho_found, rho, z_found, z
 
-    def analyze(self, band, wl_range):
+    def analyze_error(self, band, wl_range, theory_compare=True,
+                wavelength_range=True):
+        """Calculate average cherenkov angle and error from angle against
+        wavelength data. Then have option to compare to effective medium
+        theory and calculate for different wavelength ranges."""
+
         kz = self.data[band]['crossings']['kz']
         k_rho = self.data[band]['crossings']['k_rho']
         f = self.data[band]['crossings']['frequency']
         d_rho, dz = self.data[band]['crossings']['direction']
         adj_for_e_diretion = np.arctan(dz/(d_rho+1e-20))
         theta = np.arctan(kz/(k_rho+1e-20)) - adj_for_e_diretion
-        wl = 2*np.pi*3.e8/f
+        # wl = 2*np.pi*3.e8/f
+        wl = 2.*np.pi/(kz**2.+k_rho**2.+1e-7)**0.5
         pos_th, pos_wl, mean, err = \
             self._calc_err(theta, wl, wl_range)
         neg_th, neg_wl, neg_mean, neg_err = \
@@ -208,11 +220,52 @@ class Dispersion3D(Bzone2D):
         self.data[band]['crossings']['neg']['error'] = neg_err
         self.data[band]['crossings']['neg']['average'] = neg_mean
         self.data[band]['crossings']['wavelength'] = wl
-        # volume ratio xy plane
-        v_r = (np.pi*(0.45*(3**0.5))**2)/(3*3**0.5/2)
-        # volume ratio z direction
-        v_rz = 2./3.
-        self.compare_sio2(ratio_2d=v_r, ratio_3d=v_rz)
+
+    def plotRange(self):
+        for band in self.data:
+            wl_low_a = []
+            mean_a = []
+            err_a = []
+            theta = self.data[band]['crossings']['theta']
+            # self.sort_data('wavelength', subkeys=['crossings'])
+            wl = np.array(self.data[band]['crossings']['wavelength'])
+            # print(wl)
+            # print(theta)
+            for i, wl_low in enumerate(range(250,401,50)):
+                print(wl_low)
+                wl_r = [wl_low*1.e-9, 500.e-9]
+                _, _, mean_t, err_t = \
+                    self._calc_err(theta, wl, wl_r)
+                if err_t is None or mean_t is math.nan:
+                    continue
+                mean_a.append(mean_t)
+                err_a.append(err_t)
+                wl_low_a.append(wl_low)
+            fig = plt.figure(figsize=(10,8))
+            ax = fig.add_subplot(111)
+            print(mean_a)
+            print(err_a)
+            mean_a = np.array(mean_a)
+            err_a = np.array(err_a)
+            plot1 = ax.errorbar(wl_low_a, mean_a, err_a/2., \
+                color='black', \
+                capsize=5, marker='o', markersize=5, label='Cherenkov Angle')
+            ax.set_title("Effect of Wavelength Range on Cherenkov Angle and "
+                         "\n Chromatic Error (3D Model)")
+            ax.set_xlabel(r"Lower Wavelength Limit (nm)")
+            ax.set_ylabel(r"Average Saturated Cherenkov Angle $\theta_c$ "
+                          r"(rad)")
+            # ax.yaxis.set_major_locator(ticker.MultipleLocator(0.001))
+            ax1 = ax.twinx()
+            plot2 = ax1.plot(wl_low_a, err_a, color='black', \
+                linestyle='--', label='Chromatic Error')
+            ax1.set_ylabel(r"Chromatic Error $\Delta\theta_c$ (rad)")
+            #ax.set_yticks(np.arange(np.min(mean)-np.max(err), \
+            #    np.max(mean)+np.max(err), 0.001))
+            fig.legend(loc=1, bbox_to_anchor=(1,1), \
+                bbox_transform=ax.transAxes)
+            fig.savefig("wavelengths.png", bbox_inches='tight')
+            fig.show()
 
     def _calc_err(self, theta, wl, wl_range, sign=1):
         """Find chromatic error and remove negative/positive angles between
@@ -240,10 +293,13 @@ class Dispersion3D(Bzone2D):
         try:
             mean = np.mean(theta_nm_range)
             err = abs(np.max(theta_nm_range)-np.min(theta_nm_range))
-            print("Angle +ve", mean)
-            print("Chromatic error +ve", err)
+            print("Angle", mean)
+            print("Chromatic error", err)
         except ValueError:
             print("None found")
+            print(mean)
+            print(err)
+            print("======")
         return theta_nm_range, wl_nm_range, mean, err
 
     def plotCherenkov(self):
@@ -279,8 +335,8 @@ class Dispersion3D(Bzone2D):
             kz = self.data[band]['crossings']['kz']
             k_rho = self.data[band]['crossings']['k_rho']
             f = self.data[band]['crossings']['frequency']
-
-            ax.plot(th, wl*1e9, linestyle='None', marker='o', color='black')
+            wl = np.array(wl)
+            ax.plot(th, wl*1.e9, linestyle='None', marker='o', color='black')
             ax.set_xticks(np.arange(0,0.4+0.004, 0.05))  # angle
             ax.set_xlim([0, max(th_pos)+0.05])
             global_max = max([np.max(kz), np.max(k_rho)])
@@ -295,11 +351,13 @@ class Dispersion3D(Bzone2D):
         fig1.show()
 
     def plot3d(self, mode='surface'):
-
-        print("Reflecting")
-        self.reflect()
-        print("Interpolating")
-        self.interpolate()
+        """Plot dispersion"""
+        if not self.status['reflected']:
+            print("Reflecting")
+            self.reflect()
+        if not self.status['interpolated']:
+            print("Interpolating")
+            self.interpolate()
         print("Plotting")
         fig = plt.figure(figsize=(12,9))
 
@@ -339,13 +397,23 @@ class Dispersion3D(Bzone2D):
             fig.savefig("dispersion"+band+".png", bbox_inches='tight')
             fig.show()
 
-    def compare_sio2(self, ratio_2d, ratio_3d, index="sio2"):
+    def compare_sio2(self, ratio_2d=None, ratio_3d=None, index="sio2", \
+        filename=None, modelname=None, n_lim=None):
         if not self.status['intersected']:
             print("Cherenkov angle has not been calculated, please use "
                   "calculateCherenkov(v=<speed>, direction=<[rho, z]>")
             return
+        if ratio_2d is None:
+            ratio_2d = (np.pi*(0.45*(3**0.5))**2)/(3*3**0.5/2)
+        # volume ratio z direction
+        if ratio_3d is None:
+            ratio_3d = 2./3.
         for band in self.data:
             wl = self.data[band]['crossings']['wavelength']
-            th = self.data[band]['crossings']['angle']
+            th = self.data[band]['crossings']['theta']
             effective.compare_medium(th, wl, ratio_2d, ratio_3d, index=index,
-                                    band=band)
+                                    band=band, filename=filename,
+                                    modelname=modelname, n_lim=[1.035,1.07])
+
+    def photon_yield(self);
+        yield.compute_yield

@@ -283,4 +283,24 @@ class Analyze1D(CSVLoader):
                     th_i, wl_i, ratio_2d, index=index, band=b,
                     modelname=modelname_a, filename=filename+str(a_i))
 
-
+    def sort_data(self, key, direction=1):
+        """sort ascending according to key, e.g. key = 'wavelength'"""
+        data = self.data
+        for root in data:
+            for b in range(self.num_bands[root]):
+                data = data[root]
+                # print("Sorting", key)
+                sort_index = np.argsort(data[key][b])
+                if direction == -1:
+                    sort_index = sort_index[:-1]
+                # first check if same number of sublists
+                for param in data[root]:
+                    if len(data[root][param]) != \
+                        len(data[root][key]):
+                            continue
+                    # check same data length
+                    if len(data[root][param][b]) == \
+                        len(data[root][key][b]):
+                            # print("sorting", param)
+                            data[root][param][b] = \
+                            [data[param][b][ind] for ind in sort_index]

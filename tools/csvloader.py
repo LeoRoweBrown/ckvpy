@@ -3,10 +3,11 @@ import math
 import numpy as np
 import json
 
+# TODO: Move band to a key after a: e.g. data[a][band][wavelength]
 class CSVLoader(object):
     def __init__(
-                self, datafile, file_suffix='undefined', headers=[],
-                sort_by='undefined'):
+                self, datafile, file_suffix='default', headers=[],
+                sort_by='default'):
         """
         Base class to dump and analyse Cerenkov data tables from COMSOL.
         Aim is to be adaptable to different datasets.
@@ -62,7 +63,7 @@ class CSVLoader(object):
         print(self.col)
         print("sorting by", self.sort_by)
 
-        if type(file_suffix) is list and file_suffix[0] is not 'undefined':
+        if type(file_suffix) is list and file_suffix[0] is not 'default':
             self.format = 'split'
             self.prefix = datafile
             self.file_suffix = file_suffix
@@ -73,7 +74,7 @@ class CSVLoader(object):
                   "method read(<path>). Otherwise, the first value in the "
                   "list will be used.")
             datafile += str(file_suffix[0]) + ".csv"
-        elif type(file_suffix) is str or file_suffix[0] is 'undefined':
+        elif type(file_suffix) is str or file_suffix[0] is 'default':
             self.file_suffix = [file_suffix]
             self.format = 'single'
         try:
@@ -171,36 +172,47 @@ class CSVLoader(object):
                     else:
                         self.data[root][key].append(data_dump)
                     b += 1
-                # avoid storing param key twice
-                # e.g. avoid data['1.00E-07']['1.00E-07']
 
-                # split data into bands (sub lists)
-                # print("num", num_bands)
-                # self.data[root][key] = [None]*num_bands
-                
             self.data[root].pop('raw')
 
-    def sort_data(self, key, direction=1):
+    def sort_data(self, key, subkeys=None, direction=1):
         """sort ascending according to key, e.g. key = 'wavelength'"""
-        for root in self.data:
-            for b in range(self.num_bands[root]):
-                data = self.data[root]
-                # print("Sorting", key)
-                sort_index = np.argsort(data[key][b])
-                if direction == -1:
-                    sort_index = sort_index[:-1]
-                # first check if same number of sublists
-                for param in self.data[root]:
-                    if len(self.data[root][param]) != \
-                        len(self.data[root][key]):
-                            continue
-                    # check same data length
-                    if len(self.data[root][param][b]) == \
-                        len(self.data[root][key][b]):
-                            # print("sorting", param)
-                            self.data[root][param][b] = \
-                            [data[param][b][ind] for ind in sort_index]
+        data = self.data
+        for root in data:
+            if subkeys is None:
+                data = data[root]
+            else:
+                data = data[root]
+                for sk in subkeys:
+                    data = data[sk]
+            # print("Sorting", key)
+            sort_index = np.argsort(data[key])
+            if direction == -1:
+                sort_index = sort_index[:-1]
+            # first check if same number of sublists
+            for param in data:
+                if len(data[param]) != \
+                    len(data[key]):
+                        continue
+                # check same data length
+                if len(data[param]) == \
+                    len(data[key]):
+                        print("sorting", param)
+                        data[param] = \
+                        [data[param][ind] for ind in sort_index]
 
     def save_data(self, name):
         with open(name, 'w') as f:
             json.dump(self.data, f)
+
+    def jsonify(self):
+        raise NotImplementedError
+        self._search(self.data)
+
+    def _search(data):
+        raise NotImplementedError
+        for key in data:
+            if type(data[key]) is dict:
+                _search(data[key])
+            elif type(data['key']) is np.ndarray:
+                data['key'] = data.tolist()

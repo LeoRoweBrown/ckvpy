@@ -32,7 +32,8 @@ def ratio(E_matrix, E_inclusion, E_effective):
         + 2*E_matrix*(E_inclusion-E_matrix))
 
 def compare_medium(th, wl, ratio_2d, ratio_3d=None, index="sio2", \
-    wl_range = [250.e-9, 500.e-9], band=0, filename=None, modelname=None):
+    wl_range = [250.e-9, 500.e-9], band=0, filename=None, modelname=None, \
+    n_lim=None):
     """Compare expected refractive index/Cherenkov angle from 
     Maxwell-Garnett formula to data from simulation.
     Args:
@@ -78,26 +79,28 @@ def compare_medium(th, wl, ratio_2d, ratio_3d=None, index="sio2", \
     global_max = max([np.max(n_eff), np.max(n_data)])
     global_min = min([np.min(n_eff), np.min(n_data)])
 
-    ax.set_ylim([np.min(n_eff)-0.005, 1.07])
-    ax.set_ylim(global_min, global_max)
+    # ax.set_ylim([np.min(n_eff)-0.005, 1.07])
+    if n_lim is None:
+        n_lim = global_min, global_max
+    ax.set_ylim(n_lim)
 
     title = ("Effective Index Comparison Between Theory and "
-            "Simulation \n (Band " + str(int(band+1)) + ") ")
+            "Simulation \n (Band " + str(int(band)+1) + ") ")
     if modelname is not None:
         title += "(" + modelname + ")"
     ax.set_title(title)
     ax.set_xlabel(r"Wavelength $\lambda$ (nm)")
     ax.set_ylabel(r"Refractive index $n_{eff}$")
     ax.legend()
-    ax.axvline(wl_range[0], linestyle='dashed', color='black')
-    ax.axvline(wl_range[1], linestyle='dashed', color='black')
+    # ax.axvline(wl_range[0], linestyle='dashed', color='black')
+    # ax.axvline(wl_range[1], linestyle='dashed', color='black')
     ax1 = ax.twinx() # fig.add_subplot(212)
-    ax1.set_xlim([np.min(wl),1000])
+    ax1.set_xlim([np.min(wl),600])
     # ax1.yaxis.grid(color='black')
     # ax.xaxis.grid(color='black')
     # ax1.set_ylim([np.arccos(1./(np.min(n_eff)-0.005)), np.arccos(1./(np.max(n_data)+0.005))])
-    yl = np.arccos(1./(np.min(n_eff)-0.005))
-    yh = np.arccos(1./np.max(n_eff))
+    yl = np.arccos(1./n_lim[0])
+    yh = np.arccos(1./n_lim[1])
     ax1.set_ylim([yl, yh])
     ax1.set_yticks(np.arange(np.round(yl*2.0, 2)/2.0, \
         yh+0.005, 0.01))
