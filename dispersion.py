@@ -68,19 +68,19 @@ class Dispersion3D(Bzone2D):
             self.interpolate()
 
         for band in self.data:
-            m_rho = self.data[band]['mi']  # matrix of k_rho values
-            mz = np.copy(self.data[band]['mz'])  # mutated so copy
-            my = self.data[band]['my']  # matrix of ky values
-            mx = self.data[band]['mx']  # matrix of kx values
-            mf = np.copy(self.data[band]['mf'])  # mutated so copy
+            m_rho = self.data['default'][band]['mi']  # matrix of k_rho values
+            mz = np.copy(self.data['default'][band]['mz'])  # mutated so copy
+            my = self.data['default'][band]['my']  # matrix of ky values
+            mx = self.data['default'][band]['mx']  # matrix of kx values
+            mf = np.copy(self.data['default'][band]['mf'])  # mutated so copy
 
             z_array = mz.T[0][-1:1:-1]  # starts at maximum
             rho_array = m_rho[0][1:-1]  # cut off edges (interp)
 
-            # e_plane = self.data[band]['mj']*3.e8*v
+            # e_plane = self.data['default'][band]['mj']*3.e8*v
             mf *= 2*np.pi  # omega=2pif
             mf = mf.T # since we transpose z to get z array from columns
-            self.data[band]['crossings'] = \
+            self.data['default'][band]['crossings'] = \
                 {'ke': [None], 'ko': [None], 'f': [None], 'direction': direction}
 
             kz_c = np.array([])  # empty temp arrays to store crossing points
@@ -107,10 +107,10 @@ class Dispersion3D(Bzone2D):
                         kz_c = np.append(kz_c, kz)
                         k_rho_c = np.append(k_rho_c, k_rho_cross)
                         f_c = np.append(f_c, f_rho_cross)
-            self.data[band]['crossings']['kz'] = kz_c
-            self.data[band]['crossings']['k_rho'] = k_rho_c
-            self.data[band]['crossings']['frequency'] = f_c
-            if len(self.data[band]['crossings']['kz']) == 0:
+            self.data['default'][band]['crossings']['kz'] = kz_c
+            self.data['default'][band]['crossings']['k_rho'] = k_rho_c
+            self.data['default'][band]['crossings']['frequency'] = f_c
+            if len(self.data['default'][band]['crossings']['kz']) == 0:
                 raise Warning("No intersection found between electron plane "
                             "and dispersion plane,")
             self.status['intersected'] = True
@@ -198,10 +198,10 @@ class Dispersion3D(Bzone2D):
         wavelength data. Then have option to compare to effective medium
         theory and calculate for different wavelength ranges."""
 
-        kz = self.data[band]['crossings']['kz']
-        k_rho = self.data[band]['crossings']['k_rho']
-        f = self.data[band]['crossings']['frequency']
-        d_rho, dz = self.data[band]['crossings']['direction']
+        kz = self.data['default'][band]['crossings']['kz']
+        k_rho = self.data['default'][band]['crossings']['k_rho']
+        f = self.data['default'][band]['crossings']['frequency']
+        d_rho, dz = self.data['default'][band]['crossings']['direction']
         adj_for_e_diretion = np.arctan(dz/(d_rho+1e-20))
         theta = np.arctan(kz/(k_rho+1e-20)) - adj_for_e_diretion
         # wl = 2*np.pi*3.e8/f
@@ -210,25 +210,25 @@ class Dispersion3D(Bzone2D):
             self._calc_err(theta, wl, wl_range)
         neg_th, neg_wl, neg_mean, neg_err = \
             self._calc_err(theta, wl, wl_range, sign=-1)
-        self.data[band]['crossings']['theta'] = theta
-        self.data[band]['crossings']['pos'] = {'theta': pos_th}
-        self.data[band]['crossings']['pos']['wavelength'] = pos_wl
-        self.data[band]['crossings']['pos']['error'] = err
-        self.data[band]['crossings']['pos']['average'] = mean
-        self.data[band]['crossings']['neg'] = {'theta': neg_th}
-        self.data[band]['crossings']['neg']['wavelength'] = neg_wl
-        self.data[band]['crossings']['neg']['error'] = neg_err
-        self.data[band]['crossings']['neg']['average'] = neg_mean
-        self.data[band]['crossings']['wavelength'] = wl
+        self.data['default'][band]['crossings']['theta'] = theta
+        self.data['default'][band]['crossings']['pos'] = {'theta': pos_th}
+        self.data['default'][band]['crossings']['pos']['wavelength'] = pos_wl
+        self.data['default'][band]['crossings']['pos']['error'] = err
+        self.data['default'][band]['crossings']['pos']['average'] = mean
+        self.data['default'][band]['crossings']['neg'] = {'theta': neg_th}
+        self.data['default'][band]['crossings']['neg']['wavelength'] = neg_wl
+        self.data['default'][band]['crossings']['neg']['error'] = neg_err
+        self.data['default'][band]['crossings']['neg']['average'] = neg_mean
+        self.data['default'][band]['crossings']['wavelength'] = wl
 
     def plotRange(self):
         for band in self.data:
             wl_low_a = []
             mean_a = []
             err_a = []
-            theta = self.data[band]['crossings']['theta']
+            theta = self.data['default'][band]['crossings']['theta']
             # self.sort_data('wavelength', subkeys=['crossings'])
-            wl = np.array(self.data[band]['crossings']['wavelength'])
+            wl = np.array(self.data['default'][band]['crossings']['wavelength'])
             # print(wl)
             # print(theta)
             for i, wl_low in enumerate(range(250,401,50)):
@@ -329,12 +329,12 @@ class Dispersion3D(Bzone2D):
 
         for band in self.data:
             print("Band", band + ":")
-            th = self.data[band]['crossings']['theta']
-            th_pos = self.data[band]['crossings']['pos']['theta']
-            wl = self.data[band]['crossings']['wavelength']
-            kz = self.data[band]['crossings']['kz']
-            k_rho = self.data[band]['crossings']['k_rho']
-            f = self.data[band]['crossings']['frequency']
+            th = self.data['default'][band]['crossings']['theta']
+            th_pos = self.data['default'][band]['crossings']['pos']['theta']
+            wl = self.data['default'][band]['crossings']['wavelength']
+            kz = self.data['default'][band]['crossings']['kz']
+            k_rho = self.data['default'][band]['crossings']['k_rho']
+            f = self.data['default'][band]['crossings']['frequency']
             wl = np.array(wl)
             ax.plot(th, wl*1.e9, linestyle='None', marker='o', color='black')
             ax.set_xticks(np.arange(0,0.4+0.004, 0.05))  # angle
@@ -362,9 +362,9 @@ class Dispersion3D(Bzone2D):
         fig = plt.figure(figsize=(12,9))
 
         for i, band in enumerate(self.data):
-            mf = self.data[band]['mf']
-            m_rho = self.data[band]['mi']
-            mz = self.data[band]['mj']
+            mf = self.data['default'][band]['mf']
+            m_rho = self.data['default'][band]['mi']
+            mz = self.data['default'][band]['mj']
 
             ax = fig.add_subplot(1,1,1, projection='3d')
             global_max = np.max([np.max(m_rho), np.max(mz)])
@@ -409,8 +409,8 @@ class Dispersion3D(Bzone2D):
         if ratio_3d is None:
             ratio_3d = 2./3.
         for band in self.data:
-            wl = self.data[band]['crossings']['wavelength']
-            th = self.data[band]['crossings']['theta']
+            wl = self.data['default'][band]['crossings']['wavelength']
+            th = self.data['default'][band]['crossings']['theta']
             effective.compare_medium(th, wl, ratio_2d, ratio_3d, index=index,
                                     band=band, filename=filename,
                                     modelname=modelname, n_lim=[1.035,1.07])

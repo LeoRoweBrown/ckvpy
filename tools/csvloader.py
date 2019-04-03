@@ -104,7 +104,7 @@ class CSVLoader(object):
                     continue
                 # if self.format is 'merged' or self.format is 'single':
                 try:
-                    # root key i.e. self.data[root]
+                    # root key i.e. self.data[root][band]
                     root = '%.3g' % float(row[self.col[self.sort_by]])
                 except KeyError:
                     raise KeyError("Chosen sort_by key does not exist in list"
@@ -153,13 +153,13 @@ class CSVLoader(object):
             num_bands = int(max([line[self.col['band']] 
                     for line in self.data[root]['raw']]))
             self.num_bands[root] = num_bands
-            for key in self.col:
-                if key is self.sort_by:
-                   continue
-                self.data[root][key] = []
-                b = 0
-                reshape = False
-                while b < num_bands:
+            b = 0
+            while b < num_bands:
+                self.data[root][band] = {}
+                for key in self.col:
+                    if key is self.sort_by:
+                        continue
+                    self.data[root][band][key] = []
                     if key is self.sort_by:
                         continue
                     data_dump = [line[self.col[key]]
@@ -168,10 +168,10 @@ class CSVLoader(object):
                     
                     if self.sort_by is 'band': # for bz2d.py
                         b = int(root) - 1 # dont keep appending data
-                        self.data[root][key] = data_dump
+                        self.data[root][band][key] = data_dump
                     else:
-                        self.data[root][key].append(data_dump)
-                    b += 1
+                        self.data[root][band][key].append(data_dump)
+                b += 1
 
             self.data[root].pop('raw')
 
@@ -179,6 +179,7 @@ class CSVLoader(object):
         """sort ascending according to key, e.g. key = 'wavelength'"""
         data = self.data
         for root in data:
+            num_bands = self.num_bands[root]
             if subkeys is None:
                 data = data[root]
             else:
