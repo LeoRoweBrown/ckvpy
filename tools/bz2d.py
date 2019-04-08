@@ -11,16 +11,17 @@ class Bzone2D(CSVLoader):
     
     def __init__(self, datafile, symmetry, 
                 headers=['skip', 'band', 'skip' 'frequency',\
-                'kx', 'ky', 'kz', 'n', 'skip'], sort_by = 'band', ndim=3):
+                'kx', 'ky', 'kz', 'n', 'skip'], ndim=3, root='default'):
         
         print("Using Bzone2D")
 
-        np.set_printoptions(precision=3) # will this affect data saved to text?
+        # np.set_printoptions(precision=3) # will this affect data saved to text?
         self.ndim = ndim
         self.symmetry = symmetry
         self.reflected = False
         self.status = {'reflected': False, 'interpolated':False, \
             'intersected': False}
+        self.root = root
 
         for header in headers:
             if header not in \
@@ -28,12 +29,12 @@ class Bzone2D(CSVLoader):
                 raise ValueError("Invalid header supplied, must be one of"
                     "['band', 'frequency', 'kx', 'ky', 'kz', 'n']")
         return super(Bzone2D, self).__init__\
-            (datafile, headers=headers, sort_by = sort_by)
+            (datafile, headers=headers)
 
     def _convert_to_polar(self, inverse=False):
-        for band in self.data:
-            kx = np.array(self.data[band]['kx'])
-            ky = np.array(self.data[band]['ky'])
+        for band in self.data[self.root]:
+            kx = np.array(self.data[self.root][band]['kx'])
+            ky = np.array(self.data[self.root][band]['ky'])
             kz = np.zeros_like(ky)
             k_theta = np.zeros_like(ky)  # in plane angle
             k_rho = np.sqrt(kx*kx + ky*ky)  # in plane component
@@ -50,7 +51,7 @@ class Bzone2D(CSVLoader):
                 k_phi = np.zeros_like(ky)
 
             if self.ndim == 3:
-                kz = np.array(self.data[band]['kz'])
+                kz = np.array(self.data[self.root][band]['kz'])
                 # k_theta = np.arctan((kx*kx + ky*ky)**0.5/kz)
                 k_abs = np.sqrt(kx*kx + ky*ky + kz*kz)
                 k_phi = np.zeros_like(kz)
@@ -84,14 +85,15 @@ class Bzone2D(CSVLoader):
 
             # print(type(k_abs), type(k_phi), type(k_theta), type(k_rho))
            
-            self.data[band]['k_abs'] = k_abs
-            self.data[band]['k_theta'] = k_theta
-            self.data[band]['k_rho'] = k_rho
-            self.data[band]['k_phi'] = k_phi
+            self.data[self.root][band]['k_abs'] = k_abs
+            self.data[self.root][band]['k_theta'] = k_theta
+            self.data[self.root][band]['k_rho'] = k_rho
+            self.data[self.root][band]['k_phi'] = k_phi
             lengths = [len(k_abs), len(k_theta), len(k_rho), len(k_phi)]
             if lengths.count(lengths[0]) != len(lengths):
                 raise IndexError("Data arrays do not have"
                                  "same lengths!")
+            self.data[self.root][band]['wavelength'] = 2*np.pi/k_abs
 
     def reflect(self, symmetry=4):
         """
@@ -128,42 +130,46 @@ class Bzone2D(CSVLoader):
 
         self._convert_to_polar()
 
-        for band in self.data:
-            start_angle = np.min(self.data[band]['k_theta']) 
+        for band in self.data[self.root]:
+            start_angle = np.min(self.data[self.root][band]['k_theta']) 
             if abs(start_angle) > 1e-10:
                 raise ValueError("Please only use data that starts"
                     "from 0 degrees")
             #print(band)
             for params in reflections:
-                new_angles = params[0]*np.array(self.data[band]['k_theta']) \
+                new_angles = params[0]*np.array(self.data[self.root][band]['k_theta']) \
                     + params[1]
-                #plane_angle = np.average(self.data[band]['plane_angle'])
+                #plane_angle = np.average(self.data[self.root][band]['plane_angle'])
                 # tile copies array and appends
-                self.data[band]['k_abs'] = \
-                    np.tile(self.data[band]['k_abs'],2) 
-                self.data[band]['k_theta'] = \
-                    np.concatenate((self.data[band]['k_theta'], new_angles))
-                self.data[band]['frequency'] = \
-                    np.tile(self.data[band]['frequency'], 2)
-                self.data[band]['k_rho'] = \
-                    np.tile(self.data[band]['k_rho'], 2)
-                self.data[band]['k_phi'] = \
-                    np.tile(self.data[band]['k_phi'], 2)
+                self.data[self.root][band]['k_abs'] = \
+                    np.tile(self.data[self.root][band]['k_abs'],2) 
+                self.data[self.root][band]['k_theta'] = \
+                    np.concatenate((self.data[self.root][band]['k_theta'], \
+                        new_angles))
+                self.data[self.root][band]['frequency'] = \
+                    np.tile(self.data[self.root][band]['frequency'], 2)
+                self.data[self.root][band]['k_rho'] = \
+                    np.tile(self.data[self.root][band]['k_rho'], 2)
+                self.data[self.root][band]['k_phi'] = \
+                    np.tile(self.data[self.root][band]['k_phi'], 2)
 
             # now use full k_abs and k_theta data to derive kx, ky kz
             if self.ndim == 3:
-                k_rho = np.array(self.data[band]['k_abs'])*\
-                    np.sin(self.data[band]['k_theta'])
-                self.data[band]['k_rho'] = k_rho
-                self.data[band]['kx'] = k_rho*np.cos(self.data[band]['k_phi'])
-                self.data[band]['ky'] = k_rho*np.sin(self.data[band]['k_phi'])
-                self.data[band]['kz'] = np.array(self.data[band]['k_abs'])*\
-                    np.cos(self.data[band]['k_theta'])
+                k_rho = np.array(self.data[self.root][band]['k_abs'])*\
+                    np.sin(self.data[self.root][band]['k_theta'])
+                self.data[self.root][band]['k_rho'] = k_rho
+                self.data[self.root][band]['kx'] = \
+                    k_rho*np.cos(self.data[self.root][band]['k_phi'])
+                self.data[self.root][band]['ky'] = \
+                    k_rho*np.sin(self.data[self.root][band]['k_phi'])
+                self.data[self.root][band]['kz'] = \
+                    np.array(self.data[self.root][band]['k_abs'])*\
+                    np.cos(self.data[self.root][band]['k_theta'])
             elif self.ndim == 2:
-                self.data[band]['kx'] = self.band[band]['k_abs']*\
-                    np.cos(self.data[band]['k_theta'])
-                self.data[band]['ky'] = self.band[band]['k_abs']*\
-                    np.sin(self.data[band]['k_theta'])
+                self.data[self.root][band]['kx'] = self.band[band]['k_abs']*\
+                    np.cos(self.data[self.root][band]['k_theta'])
+                self.data[self.root][band]['ky'] = self.band[band]['k_abs']*\
+                    np.sin(self.data[self.root][band]['k_theta'])
         self.status['reflected'] = True
 
     def interpolate(self, resolution=100, method='cubic'):
@@ -172,16 +178,16 @@ class Bzone2D(CSVLoader):
         if not self.status['reflected']:
             self.reflect(self.symmetry)
 
-        for band in self.data:
+        for band in self.data[self.root]:
             if self.ndim == 3:
-                ki_data = self.data[band]['k_rho']
-                kj_data = self.data[band]['kz']
+                ki_data = self.data[self.root][band]['k_rho']
+                kj_data = self.data[self.root][band]['kz']
 
             elif self.ndim == 2:
-                ki_data = self.data[band]['kx']
-                kj_data = self.data[band]['ky']
+                ki_data = self.data[self.root][band]['kx']
+                kj_data = self.data[self.root][band]['ky']
 
-            f_data = self.data[band]['frequency']
+            f_data = self.data[self.root][band]['frequency']
 
             print("Hard zeroes in data?", 0 in f_data)
             print("NaNs in data?", math.nan in f_data)
@@ -214,31 +220,31 @@ class Bzone2D(CSVLoader):
             if np.nan in mf:
                 raise Warning("NaNs in matrix")
 
-            phi = np.mean(self.data[band]['k_phi'])
-            self.data[band]['mx'] = \
+            phi = np.mean(self.data[self.root][band]['k_phi'])
+            self.data[self.root][band]['mx'] = \
                 mi*np.cos(phi)
-            self.data[band]['my'] = \
+            self.data[self.root][band]['my'] = \
                 mi*np.sin(phi)
-            self.data[band]['mz'] = mj
-            self.data[band]['mf'] = mf
-            self.data[band]['mi'] = mi
-            self.data[band]['mj'] = mj
+            self.data[self.root][band]['mz'] = mj
+            self.data[self.root][band]['mf'] = mf
+            self.data[self.root][band]['mi'] = mi
+            self.data[self.root][band]['mj'] = mj
         self.status['interpolated'] = True
 
     def addzero(self, band):
         """Add point f(k=0) = 0 to help interpolation"""
-        self.data[band]['frequency'].append(0.0)
-        self.data[band]['kx'].append(0.0)
-        self.data[band]['ky'].append(0.0)
-        self.data[band]['kz'].append(0.0)
+        self.data[self.root][band]['frequency'].append(0.0)
+        self.data[self.root][band]['kx'].append(0.0)
+        self.data[self.root][band]['ky'].append(0.0)
+        self.data[self.root][band]['kz'].append(0.0)
 
     def _removerawnans(self):
         """Attempt to fix interpolation with missing data by
         removing data points with NaNs"""
-        for band in self.data:
-            for i, f in enumerate(self.data[band]['frequency']):
+        for band in self.data[self.root]:
+            for i, f in enumerate(self.data[self.root][band]['frequency']):
                 if math.isnan(f):
-                    for param in self.data[band]:
-                        if len(self.data[band][param]) == \
-                            len(self.data[band]['frequency']):
-                                np.delete(self.data[band][param], i)
+                    for param in self.data[self.root][band]:
+                        if len(self.data[self.root][band][param]) == \
+                            len(self.data[self.root][band]['frequency']):
+                                np.delete(self.data[self.root][band][param],i)

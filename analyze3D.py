@@ -1,4 +1,5 @@
 # TODO: Add filename options for plots
+# TODO: Maybe add option for a non-default sort_key (e.g. for different a_z)
 
 import numpy as np 
 import csv
@@ -15,7 +16,9 @@ import ckvpy.tools.effective as effective
 import ckvpy.tools.photon_yield as photon_yield
 from ckvpy.tools.bz2d import Bzone2D
 
-class Dispersion3D(Bzone2D):
+__all__ = ['Analyze3D']
+
+class Analyze3D(Bzone2D):
     """Intersect 2D band structure with electron plane. Can be used for 3D 
     data or 2D data, but 3D data must be confined to a 2D plane which at
     the moment is constrained to just planes in k_rho,kz where 
@@ -23,7 +26,7 @@ class Dispersion3D(Bzone2D):
     kz,ky because of the way bands are found: a direction of k is chosen
     and increase |k|. Always sorted by band (band is the root key)""" 
     def __init__(self, datafile, symmetry=4, headers=['skip', 'band', 'skip',
-                'frequency', 'kx', 'ky', 'kz', 'n', 'skip'], sort_by = 'band',
+                'frequency', 'kx', 'ky', 'kz', 'n', 'skip'],
                 ndim=3, reflect=True, interpolate=True, removenans=True):
 
         # plt.rcParams.update({'font.size': 14})
@@ -39,7 +42,7 @@ class Dispersion3D(Bzone2D):
                 print(header, "not allowed.")
                 raise ValueError("Invalid header supplied, must be one of "
                     "['band', 'frequency', 'kx', 'ky', 'kz', 'n']")
-        super(Dispersion3D, self).__init__\
+        super(Analyze3D, self).__init__\
             (datafile, headers=headers, ndim=ndim,\
             symmetry=symmetry)
         if reflect:
@@ -68,7 +71,7 @@ class Dispersion3D(Bzone2D):
                   "interpolating")
             self.interpolate()
 
-        for band in self.data:
+        for band in self.data['default']:
             m_rho = self.data['default'][band]['mi']  # matrix of k_rho values
             mz = np.copy(self.data['default'][band]['mz'])  # mutated so copy
             my = self.data['default'][band]['my']  # matrix of ky values
@@ -110,7 +113,8 @@ class Dispersion3D(Bzone2D):
                         f_c = np.append(f_c, f_rho_cross)
             self.data['default'][band]['cherenkov']['kz'] = kz_c
             self.data['default'][band]['cherenkov']['k_rho'] = k_rho_c
-            self.data['default'][band]['cherenkov']['frequency'] = f_c
+            # set back to f instead of omega
+            self.data['default'][band]['cherenkov']['frequency'] = f_c/(2*np.pi)
             if len(self.data['default'][band]['cherenkov']['kz']) == 0:
                 raise Warning("No intersection found between electron plane "
                             "and dispersion plane,")
@@ -208,28 +212,31 @@ class Dispersion3D(Bzone2D):
         # then compute outside angle
         np.tan(theta)
         # wl = 2*np.pi*3.e8/f
-        wl = 2.*np.pi/(kz**2.+k_rho**2.+1e-7)**0.5
+        # wl = 2.*np.pi/(kz**2.+k_rho**2.+1e-7)**0.5
+        wl = const.c/f
+        # print(print(wl)
+        # print(f)
         pos_th, pos_wl, mean, err = \
-            self.calc_err(theta, wl, wl_range)
+            self._calc_err(theta, wl, wl_range)
         neg_th, neg_wl, neg_mean, neg_err = \
-            self.calc_err(theta, wl, wl_range, sign=-1)
-        self.data['default'][band]['cherenkov']['theta'] = theta
-        self.data['default'][band]['cherenkov']['pos'] = {'theta': pos_th}
+            self._calc_err(theta, wl, wl_range, sign=-1)
+        self.data['default'][band]['cherenkov']['angle'] = theta
+        self.data['default'][band]['cherenkov']['pos'] = {'angle': pos_th}
         self.data['default'][band]['cherenkov']['pos']['wavelength'] = pos_wl
         self.data['default'][band]['cherenkov']['pos']['error'] = err
         self.data['default'][band]['cherenkov']['pos']['average'] = mean
-        self.data['default'][band]['cherenkov']['neg'] = {'theta': neg_th}
+        self.data['default'][band]['cherenkov']['neg'] = {'angle': neg_th}
         self.data['default'][band]['cherenkov']['neg']['wavelength'] = neg_wl
         self.data['default'][band]['cherenkov']['neg']['error'] = neg_err
         self.data['default'][band]['cherenkov']['neg']['average'] = neg_mean
         self.data['default'][band]['cherenkov']['wavelength'] = wl
 
     def plotRange(self):
-        for band in self.data:
+        for band in self.data['default']:
             wl_low_a = []
             mean_a = []
             err_a = []
-            theta = self.data['default'][band]['cherenkov']['theta']
+            theta = self.data['default'][band]['cherenkov']['angle']
             # self.sort_data('wavelength', subkeys=['cherenkov'])
             wl = np.array(self.data['default'][band]['cherenkov']['wavelength'])
             # print(wl)
@@ -330,10 +337,10 @@ class Dispersion3D(Bzone2D):
         ax1.set_ylabel(kz_axis)
         ax1.set_zlabel(r"Frequency (Hz)")
 
-        for band in self.data:
+        for band in self.data['default']:
             print("Band", band + ":")
-            th = self.data['default'][band]['cherenkov']['theta']
-            th_pos = self.data['default'][band]['cherenkov']['pos']['theta']
+            th = self.data['default'][band]['cherenkov']['angle']
+            th_pos = self.data['default'][band]['cherenkov']['pos']['angle']
             wl = self.data['default'][band]['cherenkov']['wavelength']
             kz = self.data['default'][band]['cherenkov']['kz']
             k_rho = self.data['default'][band]['cherenkov']['k_rho']
@@ -364,7 +371,9 @@ class Dispersion3D(Bzone2D):
         print("Plotting")
         fig = plt.figure(figsize=(12,9))
 
-        for i, band in enumerate(self.data):
+        for i, band in enumerate(self.data['default']):
+            print(self.data.keys())
+            print(self.data['default'][band].keys())
             mf = self.data['default'][band]['mf']
             m_rho = self.data['default'][band]['mi']
             mz = self.data['default'][band]['mj']
@@ -407,31 +416,35 @@ class Dispersion3D(Bzone2D):
                   "calculateCherenkov(v=<speed>, direction=<[rho, z]>")
             return
         if ratio_2d is None:
+            ratio_2d = 1-(np.pi*(0.45*(3**0.5))**2)/(3*3**0.5/2)
             ratio_2d = (np.pi*(0.45*(3**0.5))**2)/(3*3**0.5/2)
+            ratio_2d = 0.7346
+
         # volume ratio z direction
         if ratio_3d is None:
-            ratio_3d = 2./3.
-        for band in self.data:
+            ratio_3d = 100./250.
+            ratio_3d = 150./250.
+        for band in self.data['default']:
             wl = self.data['default'][band]['cherenkov']['wavelength']
-            th = self.data['default'][band]['cherenkov']['theta']
+            th = self.data['default'][band]['cherenkov']['angle']
             effective.compare_medium(th, wl, ratio_2d, ratio_3d, index=index,
                                     band=band, filename=filename,
-                                    modelname=modelname, n_lim=[1.035,1.07])
+                                    modelname=modelname, n_lim=[1.035,1.1])
 
     def photon_yield(self, beta=0.999, L=1.e-6, wl_range=[250.e-9, 500.e-9], \
-                    a='default', band='0'):
-        raise NotImplementedError
-        theta = self.data[a][band]['angle']
-        f = self.data[a][band]['frequency']
-        theta, f = self.wl_cut(a, band, 'frequency', wl_range)
+                    root='default', band='0'):
+        # raise NotImplementedError
+        theta = self.data['default'][band]['cherenkov']['angle']
+        f = self.data['default'][band]['cherenkov']['frequency']
+        theta, f = self.wl_cut(root, band, 'frequency', wl_range)
         n_p = photon_yield.compute(theta=theta, f=f, beta=0.999,
                                   L=100.e-6, n=None)
         if 'yield' in list(self.data[a][band]):
-            self.data[a][band]['yield'] = {
+            self.data['default'][band]['yield'] = {
                 'range': [],
                 'L': [],
                 'n_photons': []
             }
-        self.data[a][band]['yield']['range'].append(wl_range)
-        self.data[a][band]['yield']['L'].append(L)
-        self.data[a][band]['yield']['n_photons'].append(n_p)
+        self.data['default'][band]['yield']['range'].append(wl_range)
+        self.data['default'][band]['yield']['L'].append(L)
+        self.data['default'][band]['yield']['n_photons'].append(n_p)

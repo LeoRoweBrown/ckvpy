@@ -2,8 +2,9 @@ import csv
 import math
 import numpy as np
 import json
+import scipy.constants as const
 
-# TODO: Move band to a key after a: e.g. data[a][band][wavelength]
+# TODO: Remove analysis methods like calc_err from this loader class
 class CSVLoader(object):
     def __init__(
                 self, datafile, file_suffix='default', headers=[],
@@ -49,10 +50,17 @@ class CSVLoader(object):
 
         self.prefix = None
         self.data = {}  # dictionary of data, keys are unit cell size
-        self.path = None
+        self.path = datafile
         self.sort_by = sort_by
         self.col = {}
         self.num_bands = {}
+        # headers += 'default' # to handle case when root key is 'default'
+
+        if datafile[-5:] == '.json':
+            print("Loading JSON file")
+            with open(datafile, 'r') as j:
+                self.data = json.load(j)
+            return
 
         print("Using CSVLoader")
 
@@ -61,6 +69,8 @@ class CSVLoader(object):
                 continue
             self.col[header] = n
         print(self.col)
+        if self.sort_by is 'band':
+            raise KeyError("Sorting data by band as root key not supported")
         print("sorting by", self.sort_by)
 
         if type(file_suffix) is list and file_suffix[0] is not 'default':
@@ -107,17 +117,21 @@ class CSVLoader(object):
                     # root key i.e. self.data[root][band]
                     root = '%.3g' % float(row[self.col[self.sort_by]])
                 except KeyError:
-                    raise KeyError("Chosen sort_by key does not exist in list"
-                                   "of headers for this data set")
+                    if self.sort_by == 'default':
+                        # print("Using default as root key")
+                        root = 'default'
+                    else:
+                        raise KeyError("Chosen sort_by key does not exist in "
+                                       "list of headers for this data set")
                 except ValueError:
                     print("Unable to convert string to float ignoring line: ")
                     print(row)
                     continue
                 except IndexError:
-                    print("Using supplied value for root key from"
-                          "file_suffix' since it is not found in file, or"
-                          "table headings are formatted incorrectly")
-                    root = self.file_suffix[0]
+                    print("column does not exist in data "
+                          "and the file_suffix is being used as the key.")
+                    root = self.file_suffix[0] # is 'default' by default 
+                    self.sort_by = root
 
                 # for repeated calls of _get_raw with different root keys
                 # e.g. for a, '1.00E-07', '1.50E-07'
@@ -155,52 +169,174 @@ class CSVLoader(object):
             self.num_bands[root] = num_bands
             b = 0
             while b < num_bands:
+                band = str(b)
                 self.data[root][band] = {}
                 for key in self.col:
                     if key is self.sort_by:
                         continue
-                    self.data[root][band][key] = []
-                    if key is self.sort_by:
-                        continue
                     data_dump = [line[self.col[key]]
-                            for line in self.data[root]['raw']
-                            if int(line[self.col['band']]) == b+1]
-                    
-                    if self.sort_by is 'band': # for bz2d.py
-                        b = int(root) - 1 # dont keep appending data
-                        self.data[root][band][key] = data_dump
-                    else:
-                        self.data[root][band][key].append(data_dump)
+                        for line in self.data[root]['raw']
+                        if int(line[self.col['band']]) == b+1]
+                    self.data[root][band][key] = data_dump
+                # if 'n' not in self.col:
+                #     if 'kx' in self.col and 'ky' in self.col and \
+                #         'kz' in self.col and 'k_abs' not in self.col:
+                #         self.data[root][band]['k_abs'] = \
+                #             (kx**2. + ky**2. + kz**2.)**0.5
+                #         n = self._compute_n()
+                #         self.data[root][band]['n'] = n
                 b += 1
-
+                print(self.data[root][band].keys())
             self.data[root].pop('raw')
 
+    def _compute_n(self):  # unecessary? 
+        w1 = 2*np.pi*np.array(self.data[root][band][freq])[:-1]
+        w2 = 2*np.pi*np.array(self.data[root][band][freq])[1:]
+        dw = w2-w1
+        k1 = 2*np.pi*np.array(self.data[root][band]['k_abs'])[:-1]
+        k2 = 2*np.pi*np.array(self.data[root][band]['k_abs'])[1:]
+        dk = k2-k1
+        n = const.c/(dw/dk)
+        return n
+
     def sort_data(self, key, subkeys=None, direction=1):
-        """sort ascending according to key, e.g. key = 'wavelength'"""
-        data = self.data
-        for root in data:
+        """sort ascending according to key, e.g. key = 'wavelength'
+        Subkeys allow for sorting nested data"""
+        for root in self.data:
             num_bands = self.num_bands[root]
-            if subkeys is None:
-                data = data[root]
-            else:
-                data = data[root]
-                for sk in subkeys:
-                    data = data[sk]
-            # print("Sorting", key)
-            sort_index = np.argsort(data[key])
-            if direction == -1:
-                sort_index = sort_index[:-1]
-            # first check if same number of sublists
-            for param in data:
-                if len(data[param]) != \
-                    len(data[key]):
-                        continue
-                # check same data length
-                if len(data[param]) == \
-                    len(data[key]):
-                        print("sorting", param)
-                        data[param] = \
-                        [data[param][ind] for ind in sort_index]
+            for band in self.data[root]:
+                data = self.data  # reset data to entire dict
+                if subkeys is None:
+                    data = data[root][band]
+                else:
+                    data = data[root][band]
+                    for sk in subkeys:
+                        data = data[sk]
+                # print("Sorting", key)
+                sort_index = np.argsort(data[key])
+                if direction == -1:
+                    sort_index = sort_index[:-1]
+                # first check if same number of sublists
+                for param in data:
+                    if len(data[param]) != \
+                        len(data[key]):
+                            continue
+                    # check same data length
+                    if len(data[param]) == \
+                        len(data[key]):
+                            # print("sorting", param)
+                            data[param] = \
+                            [data[param][ind] for ind in sort_index]
+                    # print(sorted(self.data[root][band][key])==self.data[root][band][key])
+
+    def calc_err(self, wl_range, a='default', band='0', sign=1):
+        """Find chromatic error and remove negative/positive angles between
+        for wavelengths between 250nm and 500nm.
+        Args:
+            theta (array[float]): array of cherenkov angles found from 
+                intersection
+            wavelength (array[float]) array of wavelengths assoicated
+                with theta array
+            sign (int): whether to accept positive (1) or negative (-1) angles
+
+        Returns:
+            (list), (list), (float), (float): list of angles between 
+            250-500nm, list of wavelengths for these angles, mean of
+            angles and range of angles
+        """
+        print("Removing negative angles")
+        self.sort_data('wavelength') 
+        th_pos, wl_pos = self.wl_cut(a, band)  # take positive angles
+        self.data[a][band]['angle'] = th_pos
+        self.data[a][band]['wavelength'] = wl_pos
+
+        wl_interp1, angle_interp1, i1 = \
+            self._interp_angle(wl_range[0], a, band)
+        wl_interp2, angle_interp2, i2 = \
+            self._interp_angle(wl_range[1], a, band)
+        
+        try:
+            mean = np.average(th_pos[i1:i2])
+            err = abs(angle_interp2-angle_interp1)
+            print("Angle", mean)
+            print("Chromatic error", err)
+        except ValueError:
+            print("None found")
+            mean = None
+            err = None
+        
+        return wl_interp1, wl_interp2, mean, err
+
+    def _interp_angle(self, wavelength, a='default', band='0'):
+        """Interpolate between two points of data to find angle at desired 
+        wavelength for given band e.g. wavelength=250nm -> interpolate angle
+        between between points either side of 250nm
+        
+        Params:
+        wavelength (float): desired wavelength (in m or same unit as data) at
+            which to solve for angle 
+        a (str): key for unit cell size in data dictionary
+        """
+        i = 0
+        band = str(band)
+        # make sure in ascending order for line 
+        # "while float(wl[i]) < wavelength"
+        wl = self.data[a][band]['wavelength']
+        th = self.data[a][band]['angle']
+        
+        while float(wl[i]) < wavelength:
+            i += 1 # condition stops when data point is greater than
+                   # wavelength, so look at i and i-1 for correct range
+            if i > len(wl):
+                raise ValueError("Failed to find angles for wavelength =",
+                                 wavelength,
+                                 ". Check that it exists in data.")
+        if wl[i-1] > wavelength: 
+            # wl[i-1] should be the value smaller than desired wavelength
+            print("Wavelength too small! Changing", wavelength, "to", wl[i-1])
+            print("Dataset doesn't seem to match desired wavelength range, "
+                  "expect strange results (it is likely that the angles "
+                  "found will not be anywhere near the vertical line")
+            wavelength = wl[i-1]
+        elif wl[i] < wavelength: 
+            # wl[i] should be the value larger than desired wavelength
+            print("Wavelength too large! Changing", wavelength, "to", wl[i])
+            raise Warning("Dataset doesn't seem to match desired wavelength "
+                          "range, expect strange results (it is likely that "
+                          "the angles found will not be anywhere near the "
+                          "vertical line")
+            wavelength = wl[i]
+
+        if (wl[i]-wl[i-1]) < 1.e-15*(th[i]-th[i-1]): # avoid division by zero
+            angle = (th[i]+th[i-1])/2 # take average if angle is multivalued
+                                      # if wl1 and wl2 are the same
+        else:
+            angle = (th[i]-th[i-1])/(wl[i]-wl[i-1])*(wavelength-wl[i-1]) \
+                + th[i-1] # grad*(wavelength1-wavelength0) + angle0
+        print("found", (wavelength,angle), "between", (wl[i], th[i]), \
+              "and", (wl[i-1], th[i-1]) )
+        return wavelength, angle, i
+
+    def wl_cut(self, a='default', band='0', param_key=None, 
+              wl_range=[0.,1e10], sign=1):
+        """Take cut of data based on wavelength range. Default behaviour
+        removes negative angles"""
+        wl = self.data[a][band]['wavelength']
+        theta = self.data[a][band]['angle']
+        param = self.data[a][band][param_key]
+        wl_nm_range = []
+        theta_nm_range = []
+        param_nm_range = []
+        for i, w in enumerate(wl):
+            if w < wl_range[1] and w > wl_range[0] and sign*theta[i]>0:
+                wl_nm_range.append(w)
+                theta_nm_range.append(theta[i])
+                if param is not None:
+                    param_nm_range.append(param[i])
+        if param is None:
+            return theta_nm_range, wl_nm_range
+        else:
+            return theta_nm_range, param_nm_range, wl_nm_range
 
     def save_data(self, name):
         with open(name, 'w') as f:

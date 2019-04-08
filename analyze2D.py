@@ -7,8 +7,11 @@ from matplotlib import pyplot as plt
 import itertools
 from ckvpy.tools.csvloader import CSVLoader
 import ckvpy.tools.effective as effective
+import ckvpy.tools.photon_yield as photon_yield
 
-class Analyze1D(CSVLoader):
+__all__ = ['Analyze2D']
+
+class Analyze2D(CSVLoader):
     def __init__(self, datafile, file_suffix = 'undefined', \
         headers = ['a', 'band', 'k', 'frequency', 'wavelength', 'angle'],
         sort_by = 'a'):
@@ -17,6 +20,7 @@ class Analyze1D(CSVLoader):
         Inherits from CSVLoader class in tools.py
 
         """
+        # may change structure to include header_list only in base class
         header_list = \
         ['band', 'k', 'frequency', 'wavelength', 'angle', 'a', 'l', 'skip']
         # np.set_printoptions(precision=3)
@@ -29,7 +33,7 @@ class Analyze1D(CSVLoader):
         plt.rcParams["mathtext.fontset"] = "dejavuserif"
         plt.rcParams['font.size'] = 14
 
-        super(Analyze1D, self).__init__(
+        super(Analyze2D, self).__init__(
             datafile=datafile, file_suffix=file_suffix, headers=headers, 
             sort_by=sort_by)
 
@@ -293,25 +297,22 @@ class Analyze1D(CSVLoader):
         print(matrix)
         np.savetxt(filename, matrix)
             
-
-    # def sort_data(self, key, direction=1):
-    #     """sort ascending according to key, e.g. key = 'wavelength'"""
-    #     data = self.data
-    #     for root in data:
-    #         for b in range(self.num_bands[root]):
-    #             data = data[root]
-    #             # print("Sorting", key)
-    #             sort_index = np.argsort(data[key][b])
-    #             if direction == -1:
-    #                 sort_index = sort_index[:-1]
-    #             # first check if same number of sublists
-    #             for param in data[root]:
-    #                 if len(data[root][param]) != \
-    #                     len(data[root][key]):
-    #                         continue
-    #                 # check same data length
-    #                 if len(data[root][param][b]) == \
-    #                     len(data[root][key][b]):
-    #                         # print("sorting", param)
-    #                         data[root][param][b] = \
-    #                         [data[param][b][ind] for ind in sort_index]
+    def photon_yield(self, beta=0.999, L=100.e-6, wl_range=[250.e-9, 500.e-9], \
+                    root='default', band='0'):
+            # raise NotImplementedError
+            if root == 'default':
+                root = list(self.data)[0]
+            theta = self.data[root][band]['angle']
+            f = self.data[root][band]['frequency']
+            theta, f, wl = self.wl_cut(root, band, 'frequency', wl_range)
+            n_p = photon_yield.compute(theta=theta, f=f, beta=0.999,
+                                    L=L, n=None)
+            if 'yield' not in list(self.data[root][band]):
+                self.data[root][band]['yield'] = {
+                    'range': [],
+                    'L': [],
+                    'n_photons': []
+                }
+            self.data[root][band]['yield']['range'].append(wl_range)
+            self.data[root][band]['yield']['L'].append(L)
+            self.data[root][band]['yield']['n_photons'].append(n_p)

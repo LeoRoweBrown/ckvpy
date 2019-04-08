@@ -2,6 +2,8 @@ import numpy as np
 from matplotlib import pyplot as plt
 import os
 
+# TODO: change to deal purely with refractive index (not dielectric constant)
+# no lomnger using Maxwell-Garnett?
 def e_index(E_matrix, E_inclusion, ratio):
     """
     variables:
@@ -14,22 +16,43 @@ def e_index(E_matrix, E_inclusion, ratio):
         E_inclusion = np.ones_like(E_matrix)*E_inclusion
     elif type(E_inclusion) is np.ndarray:
         E_matrix = np.ones_like(E_inclusion)*E_matrix
-    elif type(E_inclusion) is float and type(E_matrix) is float:
-        pass
-    else:
-        raise TypeError("Values can be floats and numpy arrays only")
-
-    return E_matrix*(2*ratio*(E_inclusion-E_matrix) + E_inclusion +\
+    elif type(E_inclusion) is not float and type(E_matrix) is not float:
+        try:
+            E_inclusion = float(E_inclusion)
+            E_matrix = float(E_matrix)
+            ratio = float(ratio)
+        except:
+            raise TypeError("Values can be floats or numpy.ndarray only")
+    E_effective = E_matrix*(2*ratio*(E_inclusion-E_matrix) + E_inclusion +\
         2*E_matrix)/(2*E_matrix + E_inclusion - ratio*(E_inclusion-E_matrix))
+    return E_effective
 
 def ratio(E_matrix, E_inclusion, E_effective):
     if type(E_inclusion) is not float or type(E_matrix) is not float \
         or type(E_effective) is not float:
-        raise TypeError("Values can be floats only")
+        try:
+            E_inclusion = float(E_inclusion)
+            E_matrix = float(E_matrix)
+            E_effective = float(E_effective)
+        except:
+            raise TypeError("Values can be floats only")
 
     return (E_effective*(2*E_matrix+E_inclusion) - \
         E_matrix*(E_inclusion+2*E_matrix))/(E_effective*(E_inclusion-E_matrix)\
         + 2*E_matrix*(E_inclusion-E_matrix))
+
+def average_index(n1, n2, v1, v2, vr=None):
+    """Compute volume weighted average refractive index
+    Args:
+        n1, n2 (float/ndarray): refractive index of material 1 and 2
+        v1, v2 (float): volume of materials 1 and 2
+        vr (float): volume ratio of v1/v2 ( NOT v1/(v1+v2) )
+    """ 
+    if vr is None:
+        n = (v1*n1 + v2*n2)/(v1+v2)
+    else:
+        n = (vr*n1 + n2)/(vr+1)
+    return n
 
 def compare_medium(th, wl, ratio_2d, ratio_3d=None, index="sio2", \
     wl_range = [250.e-9, 500.e-9], band=0, filename=None, modelname=None, \
@@ -39,6 +62,8 @@ def compare_medium(th, wl, ratio_2d, ratio_3d=None, index="sio2", \
     Args:
         index (str): material refractive index in ./index/<index>.txt
             used to calculate expected index from effective medium.
+        ratio_2d (float): ratio of dielectric to air in the plane
+        ratio_3d (float): ratio of dielectric to air out of plane
     """
     plt.rcParams["font.family"] = "serif"
     plt.rcParams["mathtext.fontset"] = "dejavuserif"
@@ -55,10 +80,12 @@ def compare_medium(th, wl, ratio_2d, ratio_3d=None, index="sio2", \
     n_sio2_interp = np.interp(wl, wl_sio2, n_sio2)
     e_sio2 = n_sio2_interp*n_sio2_interp
     # volume ratio 2d
-    v_r = (np.pi*(0.45*(3**0.5))**2)/(3*3**0.5/2)
     # volume ratio z direction
-    v_rz = 2./3.
-    eff_2d = e_index(e_sio2, 1.0, ratio_2d)  # 2d slab
+    eff_2d = e_index(1.0, e_sio2, ratio_2d)  # 2d
+    eff_2d = e_index(e_sio2, 1.0, ratio_2d)
+    eff_test = e_index(1.0, e_sio2, 0.10617) # using volume
+    eff_test = e_index(e_sio2, 1.0, 0.894)
+    n_test = eff_test**0.5
     if ratio_3d is None:
         eff = eff_2d
     else:
@@ -73,6 +100,8 @@ def compare_medium(th, wl, ratio_2d, ratio_3d=None, index="sio2", \
     ax.plot(wl*1e9, n_data,
         label="Simulation", color='black', marker='o',\
         markersize=6)
+    ax.plot(wl*1e9, n_test, label="Effective medium theory volume", \
+        color='black', linestyle='--', marker='*', markersize=6)
     ax.set_xlim([np.min(wl),1000])
     ax.set_xticks(np.arange(np.min(wl)-100, 1000+100, 100))
     # ax.set_ylim([np.min(n_eff)-0.005, np.max(n_data)+0.005])
@@ -85,7 +114,7 @@ def compare_medium(th, wl, ratio_2d, ratio_3d=None, index="sio2", \
     ax.set_ylim(n_lim)
 
     title = ("Effective Index Comparison Between Theory and "
-            "Simulation \n (Band " + str(int(band)+1) + ") ")
+            "Simulation \n (Band " + str(int(band)+1) + ") Air as inclusion")
     if modelname is not None:
         title += "(" + modelname + ")"
     ax.set_title(title)
@@ -107,7 +136,7 @@ def compare_medium(th, wl, ratio_2d, ratio_3d=None, index="sio2", \
     ax1.set_xlabel(r"Wavelength $\lambda$ (nm)")
     ax1.set_ylabel(r"Saturated Cherenkov Angle $\theta_c$ (rad)")
     if filename is None:
-        fig.savefig("effective_index"+str(band)+".png")
+        fig.savefig("effective_index"+str(band)+"test.png")
     else:
         fig.savefig(filename+str(band)+".png")
-    # fig.show()
+    fig.show()

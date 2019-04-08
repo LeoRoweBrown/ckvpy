@@ -1,6 +1,6 @@
-from . import analyze1D
-from . import dispersion
+from .analyze2D import *
+from .analyze3D import *
 from . import tools
 
-__all__ = [analyze1D, dispersion, tools]
+__all__ = ['analyze2D', 'analyze3D', 'tools']
 
