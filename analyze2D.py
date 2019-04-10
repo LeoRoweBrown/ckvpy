@@ -252,8 +252,8 @@ class Analyze2D(CSVLoader):
         else:
             fig.show()
 
-    def compare_sio2(self, ratio_2d, modelname, filename, index="sio2",
-                    bands=[None], a_s=[None]):
+    def compare_sio2(self, ratio_2d=0.9, modelname=None, filename=None,
+                     index="sio2", bands=[None], a_s=[None]):
         """Compare Cherenkov behaviour in simulation to predicted from
         Maxwell Garnett and plot with tools.effective.compare_medium()
         ratio_2d (float): Volume ratio between air and SiO2
