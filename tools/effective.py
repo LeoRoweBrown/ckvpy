@@ -41,20 +41,24 @@ def ratio(E_matrix, E_inclusion, E_effective):
         E_matrix*(E_inclusion+2*E_matrix))/(E_effective*(E_inclusion-E_matrix)\
         + 2*E_matrix*(E_inclusion-E_matrix))
 
-def average_index(n1, n2, v1, v2, vr=None):
+def average_index(n1, n2, v1=None, v2=None, vr=None):
     """Compute volume weighted average refractive index
     Args:
         n1, n2 (float/ndarray): refractive index of material 1 and 2
         v1, v2 (float): volume of materials 1 and 2
-        vr (float): volume ratio of v1/v2 ( NOT v1/(v1+v2) )
+        vr (float): volume ratio of v1/(v1+v2) used instead of v1 and v2
     """ 
     if vr is None:
+        if v1 or v2 is None:
+            raise ValueError("Please supply volumes v1, v2 "
+                             "or volume ratio vr")
         n = (v1*n1 + v2*n2)/(v1+v2)
     else:
-        n = (vr*n1 + n2)/(vr+1)
+        # n = (vr*n1 + n2)/(vr+1) when vr = v1/v2
+        n = vr*n1 + (1-vr)*n2
     return n
 
-def compare_medium(th, wl, ratio_2d, ratio_3d=None, index="sio2", \
+def compare_medium(th, wl, ratio, index="sio2", \
     wl_range = [250.e-9, 500.e-9], band=0, filename=None, modelname=None, \
     n_lim=None):
     """Compare expected refractive index/Cherenkov angle from 
@@ -81,17 +85,17 @@ def compare_medium(th, wl, ratio_2d, ratio_3d=None, index="sio2", \
     e_sio2 = n_sio2_interp*n_sio2_interp
     # volume ratio 2d
     # volume ratio z direction
-    eff_2d = e_index(1.0, e_sio2, ratio_2d)  # 2d
-    eff_2d = e_index(e_sio2, 1.0, ratio_2d)
-    eff_test = e_index(1.0, e_sio2, 0.10617) # using volume
-    eff_test = e_index(e_sio2, 1.0, 0.894)
-    n_test = eff_test**0.5
-    if ratio_3d is None:
-        eff = eff_2d
-    else:
-        eff = e_index(eff_2d, 1.0, ratio_3d)  # full 3d
-    n_eff = eff**0.5  # n = sqrt(eps)
+    # eff_2d = e_index(1.0, e_sio2, ratio_2d)  # 2d
+    # n_test = eff_test**0.5
+    # if ratio_3d is None:
+    #     eff = eff_2d
+    # else:
+    #     eff = e_index(1.0, eff_2d, ratio_3d)  # full 3d
+    # n_eff = eff**0.5  # n = sqrt(eps)
     n_data = 1./np.cos(th)  # Cherenkov formula
+    # n_test = average_index(n_sio2_interp, 1.0, vr=0.106)
+    n_eff = average_index(n_sio2_interp, 1.0, vr=ratio)
+
     th_eff = np.arccos(1./n_eff)
     fig = plt.figure(figsize=(10,8))
     ax = fig.add_subplot(111)
@@ -100,8 +104,8 @@ def compare_medium(th, wl, ratio_2d, ratio_3d=None, index="sio2", \
     ax.plot(wl*1e9, n_data,
         label="Simulation", color='black', marker='o',\
         markersize=6)
-    ax.plot(wl*1e9, n_test, label="Effective medium theory volume", \
-        color='black', linestyle='--', marker='*', markersize=6)
+    # ax.plot(wl*1e9, n_test, label="Effective medium theory volume", \
+    #     color='black', linestyle='--', marker='*', markersize=6)
     ax.set_xlim([np.min(wl),1000])
     ax.set_xticks(np.arange(np.min(wl)-100, 1000+100, 100))
     # ax.set_ylim([np.min(n_eff)-0.005, np.max(n_data)+0.005])
@@ -114,20 +118,16 @@ def compare_medium(th, wl, ratio_2d, ratio_3d=None, index="sio2", \
     ax.set_ylim(n_lim)
 
     title = ("Effective Index Comparison Between Theory and "
-            "Simulation \n (Band " + str(int(band)+1) + ") Air as inclusion")
+            "Simulation for \n (Band " + str(int(band)+1) + ")")
     if modelname is not None:
-        title += "(" + modelname + ")"
+        title += " (" + modelname + ")"
     ax.set_title(title)
     ax.set_xlabel(r"Wavelength $\lambda$ (nm)")
     ax.set_ylabel(r"Refractive index $n_{eff}$")
     ax.legend()
-    # ax.axvline(wl_range[0], linestyle='dashed', color='black')
-    # ax.axvline(wl_range[1], linestyle='dashed', color='black')
     ax1 = ax.twinx() # fig.add_subplot(212)
     ax1.set_xlim([np.min(wl),600])
-    # ax1.yaxis.grid(color='black')
-    # ax.xaxis.grid(color='black')
-    # ax1.set_ylim([np.arccos(1./(np.min(n_eff)-0.005)), np.arccos(1./(np.max(n_data)+0.005))])
+    
     yl = np.arccos(1./n_lim[0])
     yh = np.arccos(1./n_lim[1])
     ax1.set_ylim([yl, yh])
@@ -139,4 +139,5 @@ def compare_medium(th, wl, ratio_2d, ratio_3d=None, index="sio2", \
         fig.savefig("effective_index"+str(band)+"test.png")
     else:
         fig.savefig(filename+str(band)+".png")
-    fig.show()
+    # fig.show()
+    plt.close()

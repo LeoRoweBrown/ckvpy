@@ -21,7 +21,7 @@ def compute(theta, f, beta, L, n=None):
         (n*np.sqrt(1-(n*np.sin(theta)**2.)) + np.cos(theta))
         )
     r_eff =(r_p + r_s)/2.
-    print(r_eff)
+    # print(r_eff)
     t_eff = 1-r_eff
     print("Transmission coeff:", t_eff)
     # derive angles inside medium with snell's law for Fresnel equation

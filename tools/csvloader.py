@@ -68,7 +68,7 @@ class CSVLoader(object):
             if header is 'skip':
                 continue
             self.col[header] = n
-        print(self.col)
+        # print(self.col)
         if self.sort_by is 'band':
             raise KeyError("Sorting data by band as root key not supported")
         print("sorting by", self.sort_by)
@@ -186,7 +186,7 @@ class CSVLoader(object):
                 #         n = self._compute_n()
                 #         self.data[root][band]['n'] = n
                 b += 1
-                print(self.data[root][band].keys())
+                # print(self.data[root][band].keys())
             self.data[root].pop('raw')
 
     def _compute_n(self):  # unecessary? 
@@ -246,9 +246,10 @@ class CSVLoader(object):
         """
         print("Removing negative angles")
         self.sort_data('wavelength') 
-        th_pos, wl_pos = self.wl_cut(a, band)  # take positive angles
+        wl_pos, th_pos = self.wl_cut(a, band)  # take positive angles
         self.data[a][band]['angle'] = th_pos
         self.data[a][band]['wavelength'] = wl_pos
+        # print(wl_pos)
 
         wl_interp1, angle_interp1, i1 = \
             self._interp_angle(wl_range[0], a, band)
@@ -277,6 +278,7 @@ class CSVLoader(object):
             which to solve for angle 
         a (str): key for unit cell size in data dictionary
         """
+        print("in csvloader")
         i = 0
         band = str(band)
         # make sure in ascending order for line 
@@ -317,26 +319,27 @@ class CSVLoader(object):
               "and", (wl[i-1], th[i-1]) )
         return wavelength, angle, i
 
-    def wl_cut(self, a='default', band='0', param_key=None, 
-              wl_range=[0.,1e10], sign=1):
+    def wl_cut(self, a='default', band='0', 
+              wl_range=[0.,1e10], param_key=None, sign=1):
         """Take cut of data based on wavelength range. Default behaviour
         removes negative angles"""
         wl = self.data[a][band]['wavelength']
-        theta = self.data[a][band]['angle']
-        param = self.data[a][band][param_key]
+        theta = np.array(self.data[a][band]['angle'])
+        if param_key is not None:
+            # print(self.data['default'][band]['cherenkov'])
+            print('cutting for', param_key)
+            param = self.data[a][band][param_key]
+        else:
+            param = theta
         wl_nm_range = []
-        theta_nm_range = []
         param_nm_range = []
         for i, w in enumerate(wl):
             if w < wl_range[1] and w > wl_range[0] and sign*theta[i]>0:
                 wl_nm_range.append(w)
-                theta_nm_range.append(theta[i])
-                if param is not None:
-                    param_nm_range.append(param[i])
-        if param is None:
-            return theta_nm_range, wl_nm_range
-        else:
-            return theta_nm_range, param_nm_range, wl_nm_range
+                param_nm_range.append(param[i])
+        return wl_nm_range, param_nm_range
+
+        return wl_nm_range, param_nm_range
 
     def save_data(self, name):
         with open(name, 'w') as f:

@@ -8,6 +8,7 @@ import itertools
 from ckvpy.tools.csvloader import CSVLoader
 import ckvpy.tools.effective as effective
 import ckvpy.tools.photon_yield as photon_yield
+from ckvpy.tools.analysis import dataAnalysis
 
 __all__ = ['Analyze2D']
 
@@ -36,6 +37,10 @@ class Analyze2D(CSVLoader):
         super(Analyze2D, self).__init__(
             datafile=datafile, file_suffix=file_suffix, headers=headers, 
             sort_by=sort_by)
+    
+    def _init_analysis(self):
+        self.data = dataAnalysis(data) # TODO: now replace every self.calc_err 
+                                       # with data.calc_err etc. 
 
     def _interp_angle(self, wavelength, a, band='0'):
         """Interpolate between two points of data to find angle at desired 
@@ -153,6 +158,7 @@ class Analyze2D(CSVLoader):
             fig.savefig(filename, bbox_inches='tight')
         else:
             fig.show()
+        plt.close()
     
     def full_plot(self, filename=None, modelname=None, \
         a_i=0, a=None, dump=False, bands=None):
@@ -211,6 +217,7 @@ class Analyze2D(CSVLoader):
             fig.savefig(filename, bbox_inches='tight')
         else:
             fig.show()
+        fig.close()
 
     def a_plot(self, filename=None, modelname=None, band='0'):
         """Plot 'a' against Cherenkov angle and chromatic error
@@ -251,8 +258,9 @@ class Analyze2D(CSVLoader):
             fig.savefig(filename, bbox_inches='tight')
         else:
             fig.show()
+        plt.close()
 
-    def compare_sio2(self, ratio_2d=0.9, modelname=None, filename=None,
+    def compare_sio2(self, ratio_2d=0.1, modelname='', filename='',
                      index="sio2", bands=[None], a_s=[None]):
         """Compare Cherenkov behaviour in simulation to predicted from
         Maxwell Garnett and plot with tools.effective.compare_medium()
@@ -274,21 +282,12 @@ class Analyze2D(CSVLoader):
                 if int(band) not in bands and bands[0] is not None:
                     continue
                 effective.compare_medium(
-                    th, wl, ratio_2d, index=index, band=band,
+                    th, wl, ratio_2d, index=index, band=band, 
+                    n_lim=[1.02,1.1],
                     modelname=modelname_a, filename=filename+str(a_i))
-
-    def photon_yield(self, wl_range=[250.e-9, 500.e9]):
-        raise NotImplementedError
-        for a in self.data:
-            for band in self.data[a]:
-                theta = self.data[a][band]['angle']
-                wl = self.data[a][band]['wavelength']
-                f = self.data[a][band]['frequency']
-                theta_cut, wl_cut, mean, err = \
-                    self._calc_err(theta, wl, wl_range)
-                photon_yield.compute(theta_cut, f)
     
     def save_table(self, filename):
+        """Save Cherenkov analysis data into a table"""
         matrix = np.empty((0,5))
         for a in self.data:
             for b in self.data[a]:
@@ -304,7 +303,8 @@ class Analyze2D(CSVLoader):
                 root = list(self.data)[0]
             theta = self.data[root][band]['angle']
             f = self.data[root][band]['frequency']
-            theta, f, wl = self.wl_cut(root, band, 'frequency', wl_range)
+            wl, theta = self.wl_cut(root, band, wl_range)
+            wl, f = self.wl_cut(root, band, wl_range, 'frequency')
             n_p = photon_yield.compute(theta=theta, f=f, beta=0.999,
                                     L=L, n=None)
             if 'yield' not in list(self.data[root][band]):

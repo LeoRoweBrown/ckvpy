@@ -53,6 +53,10 @@ class Analyze3D(Bzone2D):
         if removenans:
             self._removerawnans()
 
+    def _init_analysis(self):
+        self.data = dataAnalysis(data) # TODO: now replace every self.calc_err 
+                                       # with data.calc_err etc. 
+
     def calculateCherenkov(self, beta=0.999, direction = [1,0],
                           wl_range=[250.e-9,500.e-9]):
         """course intersection, then fine by looking in neighbourhood. 
@@ -276,6 +280,7 @@ class Analyze3D(Bzone2D):
                 bbox_transform=ax.transAxes)
             fig.savefig("wavelengths.png", bbox_inches='tight')
             fig.show()
+            plt.close()
 
     def _calc_err(self, theta, wl, wl_range, sign=1):
         """Find chromatic error and remove negative/positive angles between
@@ -359,6 +364,7 @@ class Analyze3D(Bzone2D):
         fig1.savefig("intersection.png", bbox_inches='tight')
         fig.show()
         fig1.show()
+        plt.close()
 
     def plot3d(self, mode='surface'):
         """Plot dispersion"""
@@ -408,26 +414,22 @@ class Analyze3D(Bzone2D):
             #ax.set_zlim([np.min(mf),np.max(mf)])
             fig.savefig("dispersion"+band+".png", bbox_inches='tight')
             fig.show()
+            plt.close()
 
-    def compare_sio2(self, ratio_2d=None, ratio_3d=None, index="sio2", \
+    def compare_sio2(self, ratio_3d=0.106, index="sio2", \
         filename=None, modelname=None, n_lim=None):
         if not self.status['intersected']:
             print("Cherenkov angle has not been calculated, please use "
                   "calculateCherenkov(v=<speed>, direction=<[rho, z]>")
             return
-        if ratio_2d is None:
-            ratio_2d = 1-(np.pi*(0.45*(3**0.5))**2)/(3*3**0.5/2)
-            ratio_2d = (np.pi*(0.45*(3**0.5))**2)/(3*3**0.5/2)
-            ratio_2d = 0.7346
-
+        #    ratio_2d = (np.pi*(0.45*(3**0.5))**2)/(3*3**0.5/2)
         # volume ratio z direction
-        if ratio_3d is None:
-            ratio_3d = 100./250.
-            ratio_3d = 150./250.
+        # if ratio_3d is None:
+        #     ratio_3d = 100./250.
         for band in self.data['default']:
             wl = self.data['default'][band]['cherenkov']['wavelength']
             th = self.data['default'][band]['cherenkov']['angle']
-            effective.compare_medium(th, wl, ratio_2d, ratio_3d, index=index,
+            effective.compare_medium(th, wl, ratio_3d, index=index,
                                     band=band, filename=filename,
                                     modelname=modelname, n_lim=[1.035,1.1])
 
@@ -435,11 +437,16 @@ class Analyze3D(Bzone2D):
                     root='default', band='0'):
         # raise NotImplementedError
         theta = self.data['default'][band]['cherenkov']['angle']
+
         f = self.data['default'][band]['cherenkov']['frequency']
-        theta, f = self.wl_cut(root, band, 'frequency', wl_range)
+        _, theta = self.wl_cut(root, band, wl_range=wl_range)
+        _, f = self.wl_cut(root, band, wl_range, 'frequency') # TODO: move
+        # print(theta)
+        # print('============')
+        # print(f)
         n_p = photon_yield.compute(theta=theta, f=f, beta=0.999,
-                                  L=100.e-6, n=None)
-        if 'yield' in list(self.data[a][band]):
+                                  L=1.e-3, n=None)
+        if 'yield' not in list(self.data[root][band]):
             self.data['default'][band]['yield'] = {
                 'range': [],
                 'L': [],
@@ -448,3 +455,23 @@ class Analyze3D(Bzone2D):
         self.data['default'][band]['yield']['range'].append(wl_range)
         self.data['default'][band]['yield']['L'].append(L)
         self.data['default'][band]['yield']['n_photons'].append(n_p)
+
+    def wl_cut(self, a='default', band='0', 
+              wl_range=[0.,1e10], param_key=None, sign=1):
+        """Take cut of data based on wavelength range. Default behaviour
+        removes negative angles"""
+        wl = self.data[a][band]['cherenkov']['wavelength']
+        theta = np.array(self.data[a][band]['cherenkov']['angle'])
+        if param_key is not None:
+            # print(self.data['default'][band]['cherenkov'])
+            print('cutting for', param_key)
+            param = self.data[a][band]['cherenkov'][param_key]
+        else:
+            param = theta
+        wl_nm_range = []
+        param_nm_range = []
+        for i, w in enumerate(wl):
+            if w < wl_range[1] and w > wl_range[0] and sign*theta[i]>0:
+                wl_nm_range.append(w)
+                param_nm_range.append(param[i])
+        return wl_nm_range, param_nm_range

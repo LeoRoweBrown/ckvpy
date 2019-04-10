@@ -1,6 +1,6 @@
-from .analyze2D import *
-from .analyze3D import *
-from . import tools
+from ckvpy.analyze2D import *
+from ckvpy.analyze3D import *
+from ckvpy.tools.analysis import dataAnalysis  # make this private, actually?
 
-__all__ = ['analyze2D', 'analyze3D', 'tools']
+__all__ = ['Analyze2D', 'Analyze3D']
 
