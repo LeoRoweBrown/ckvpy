@@ -10,8 +10,8 @@ class Bzone2D(CSVLoader):
     use-case"""
     
     def __init__(self, datafile, symmetry, 
-                headers=['skip', 'band', 'skip' 'frequency',\
-                'kx', 'ky', 'kz', 'n', 'skip'], ndim=3, root='default'):
+                 headers=['skip', 'band', 'skip' 'frequency','kx', 'ky', 'kz',
+                 'n', 'skip'], ndim=3, root='default', resolution=100):
         
         print("Using Bzone2D")
 
@@ -28,8 +28,11 @@ class Bzone2D(CSVLoader):
             ['band', 'frequency', 'kx', 'ky', 'kz', 'n', 'skip']:
                 raise ValueError("Invalid header supplied, must be one of"
                     "['band', 'frequency', 'kx', 'ky', 'kz', 'n']")
-        return super(Bzone2D, self).__init__\
+        super(Bzone2D, self).__init__\
             (datafile, headers=headers)
+        self.reflect()
+        self._removerawnans()
+        self.interpolate(resolution)
 
     def _convert_to_polar(self, inverse=False):
         for band in self.data[self.root]:
@@ -173,8 +176,9 @@ class Bzone2D(CSVLoader):
         self.status['reflected'] = True
 
     def interpolate(self, resolution=100, method='cubic'):
-        """ work directly in k space with k values (not fraction of brillouin
-        zone) """
+        """Work directly in k space with k values (not fraction of brillouin
+        zone) to interpolate frequency data in the full Brillouin zone."""
+        print("Interpolating with", resolution, "(lowest axis) resolution")
         if not self.status['reflected']:
             self.reflect(self.symmetry)
 

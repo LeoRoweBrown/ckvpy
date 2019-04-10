@@ -92,11 +92,11 @@ def compare_medium(th, wl, ratio, index="sio2", \
     # else:
     #     eff = e_index(1.0, eff_2d, ratio_3d)  # full 3d
     # n_eff = eff**0.5  # n = sqrt(eps)
-    n_data = 1./np.cos(th)  # Cherenkov formula
+    n_data = 1./(np.cos(th)*beta)  # Cherenkov formula
     # n_test = average_index(n_sio2_interp, 1.0, vr=0.106)
     n_eff = average_index(n_sio2_interp, 1.0, vr=ratio)
 
-    th_eff = np.arccos(1./n_eff)
+    th_eff = np.arccos(1./beta*n_eff)
     fig = plt.figure(figsize=(10,8))
     ax = fig.add_subplot(111)
     ax.plot(wl*1e9, n_eff, label="Effective medium theory", \
@@ -128,8 +128,8 @@ def compare_medium(th, wl, ratio, index="sio2", \
     ax1 = ax.twinx() # fig.add_subplot(212)
     ax1.set_xlim([np.min(wl),600])
     
-    yl = np.arccos(1./n_lim[0])
-    yh = np.arccos(1./n_lim[1])
+    yl = np.arccos(1./beta*n_lim[0])
+    yh = np.arccos(1./beta*n_lim[1])
     ax1.set_ylim([yl, yh])
     ax1.set_yticks(np.arange(np.round(yl*2.0, 2)/2.0, \
         yh+0.005, 0.01))

@@ -18,7 +18,7 @@ from ckvpy.tools.bz2d import Bzone2D
 
 __all__ = ['Analyze3D']
 
-class Analyze3D(Bzone2D):
+class Analyze3D():
     """Intersect 2D band structure with electron plane. Can be used for 3D 
     data or 2D data, but 3D data must be confined to a 2D plane which at
     the moment is constrained to just planes in k_rho,kz where 
@@ -26,8 +26,8 @@ class Analyze3D(Bzone2D):
     kz,ky because of the way bands are found: a direction of k is chosen
     and increase |k|. Always sorted by band (band is the root key)""" 
     def __init__(self, datafile, symmetry=4, headers=['skip', 'band', 'skip',
-                'frequency', 'kx', 'ky', 'kz', 'n', 'skip'],
-                ndim=3, reflect=True, interpolate=True, removenans=True):
+                 'frequency', 'kx', 'ky', 'kz', 'n', 'skip'],
+                 ndim=3, resolution=100):
 
         # plt.rcParams.update({'font.size': 14})
         plt.rcParams["font.family"] = "serif"
@@ -40,91 +40,20 @@ class Analyze3D(Bzone2D):
             if header not in \
             ['band', 'frequency', 'kx', 'ky', 'kz', 'n', 'skip']:
                 print(header, "not allowed.")
-                raise ValueError("Invalid header supplied, must be one of "
+                raise ValueError(
+                    "Invalid header supplied, must be one of "
                     "['band', 'frequency', 'kx', 'ky', 'kz', 'n']")
-        super(Analyze3D, self).__init__\
-            (datafile, headers=headers, ndim=ndim,\
-            symmetry=symmetry)
-        if reflect:
-            self.reflect()
-        if interpolate:
-            print("Interpolating")
-            self.interpolate()  # default resolution is 100 elements
-        if removenans:
-            self._removerawnans()
-
-    def _init_analysis(self):
-        self.data = dataAnalysis(data) # TODO: now replace every self.calc_err 
-                                       # with data.calc_err etc. 
-
-    def calculateCherenkov(self, beta=0.999, direction = [1,0],
-                          wl_range=[250.e-9,500.e-9]):
-        """course intersection, then fine by looking in neighbourhood. 
-        Do this by interpolating between lines?
-        Electron direciton parameterised by direction
-        Args:
-            beta (float): electron speed ratio with c
-            direction (list): determines direction of electron with idices
-                rho (|x,y|) and z which defines e-plane omega = k.v
-            wl_range list[int/float, int/float]: range of wavelength in nm
-                to analyse Cherenkov angle and chromatic error over
-        """
-        # raise NotImplementedError
-        if not self.status['interpolated']:
-            print("Not already interpolate, using default resolution and"
-                  "interpolating")
-            self.interpolate()
-
-        for band in self.data['default']:
-            m_rho = self.data['default'][band]['mi']  # matrix of k_rho values
-            mz = np.copy(self.data['default'][band]['mz'])  # mutated so copy
-            my = self.data['default'][band]['my']  # matrix of ky values
-            mx = self.data['default'][band]['mx']  # matrix of kx values
-            mf = np.copy(self.data['default'][band]['mf'])  # mutated so copy
-
-            z_array = mz.T[0][-1:1:-1]  # starts at maximum
-            rho_array = m_rho[0][1:-1]  # cut off edges (interp)
-
-            # e_plane = self.data['default'][band]['mj']*3.e8*v
-            mf *= 2*np.pi  # omega=2pif
-            mf = mf.T # since we transpose z to get z array from columns
-            self.data['default'][band]['cherenkov'] = \
-                {'ke': [None], 'ko': [None], 'f': [None], 'direction': direction}
-
-            kz_c = np.array([])  # empty temp arrays to store crossing points
-            k_rho_c = np.array([])
-            f_c = np.array([])
-            for kz_i, kz in enumerate(z_array[:-1]):  # ith value of kz
-                for k_rho_i, k_rho in enumerate(rho_array[:-1]):  # jth k_rho
-                    kz2 = z_array[kz_i + 1]  # i+1th value of kz
-                    k_rho2 = rho_array[k_rho_i + 1]  # j+1th k_rho
-                    f = mf[kz_i, k_rho_i]  # f(kz,k_rho)
-                    fz2 = mf[kz_i + 1, k_rho_i]  # f(kz2,k_rho)
-                    f_rho2 = mf[kz_i, k_rho_i + 1]  # f(kz,k_rho2)
-                    # get crossing points and booleans
-                    rho_found, rho_cross, z_found, z_cross = \
-                        self._cross(beta, kz, kz2, k_rho, k_rho2, f, fz2,
-                                    f_rho2, direction)
-                    k_rho_cross, f_rho_cross = rho_cross
-                    kz_cross, fz_cross = z_cross
-                    if z_found:  # crossing found in kz direction
-                        kz_c = np.append(kz_c, kz_cross)
-                        k_rho_c = np.append(k_rho_c, k_rho)
-                        f_c = np.append(f_c, fz_cross)
-                    if rho_found:  # crossing found in k_rho direction
-                        kz_c = np.append(kz_c, kz)
-                        k_rho_c = np.append(k_rho_c, k_rho_cross)
-                        f_c = np.append(f_c, f_rho_cross)
-            self.data['default'][band]['cherenkov']['kz'] = kz_c
-            self.data['default'][band]['cherenkov']['k_rho'] = k_rho_c
-            # set back to f instead of omega
-            self.data['default'][band]['cherenkov']['frequency'] = f_c/(2*np.pi)
-            if len(self.data['default'][band]['cherenkov']['kz']) == 0:
-                raise Warning("No intersection found between electron plane "
-                            "and dispersion plane,")
-            self.status['intersected'] = True
-            self.analyze_error(band, wl_range)
         
+        data_loader = Bzone2D(datafile, headers=headers, ndim=ndim,
+                              symmetry=symmetry, resolution=resolution)
+        self._init_analysis(data_loader)
+
+
+    def _init_analysis(self, data_loader):
+        """Pass data dictionary to dataAnalysis object"""
+        self.data = dataAnalysis(data_loader.data) 
+        # TODO: now replace every self.calc_err 
+        # with data.calc_err etc.
 
     def _cross(self, beta, kz, kz2, k_rho, k_rho2, f, fz2,
                f_rho2, direction):

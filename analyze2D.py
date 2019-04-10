@@ -12,7 +12,7 @@ from ckvpy.tools.analysis import dataAnalysis
 
 __all__ = ['Analyze2D']
 
-class Analyze2D(CSVLoader):
+class Analyze2D():
     def __init__(self, datafile, file_suffix = 'undefined', \
         headers = ['a', 'band', 'k', 'frequency', 'wavelength', 'angle'],
         sort_by = 'a'):
@@ -23,7 +23,8 @@ class Analyze2D(CSVLoader):
         """
         # may change structure to include header_list only in base class
         header_list = \
-        ['band', 'k', 'frequency', 'wavelength', 'angle', 'a', 'l', 'skip']
+        ['band', 'k', 'frequency', 'wavelength', 'angle', 'a', 'l', 'skip'
+         'kx', 'ky', 'kz', 'n']
         # np.set_printoptions(precision=3)
         for header in headers:
             if header not in header_list:
@@ -34,13 +35,15 @@ class Analyze2D(CSVLoader):
         plt.rcParams["mathtext.fontset"] = "dejavuserif"
         plt.rcParams['font.size'] = 14
 
-        super(Analyze2D, self).__init__(
-            datafile=datafile, file_suffix=file_suffix, headers=headers, 
-            sort_by=sort_by)
+        data_loader = self.CSVLoader(datafile=datafile, file_suffix=file_suffix, 
+            headers=headers, sort_by=sort_by)
+        self._init_analysis(data_loader)
     
-    def _init_analysis(self):
-        self.data = dataAnalysis(data) # TODO: now replace every self.calc_err 
-                                       # with data.calc_err etc. 
+    def _init_analysis(self, data_loader):
+        """Pass data dictionary to dataAnalysis object"""
+        self.data = dataAnalysis(data_loader.data)
+        # TODO: now replace every self.calc_err 
+        # with data.calc_err etc. 
 
     def _interp_angle(self, wavelength, a, band='0'):
         """Interpolate between two points of data to find angle at desired 
