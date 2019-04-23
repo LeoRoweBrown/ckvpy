@@ -13,6 +13,8 @@ from ckvpy.tools.analysis import dataAnalysis
 __all__ = ['Analyze2D']
 
 class Analyze2D():
+    """For plotting analysed data for case of 2D model, most actual analysis
+    takes place in analysis.py which contains data analysis classes"""
     def __init__(self, datafile, file_suffix = 'undefined', \
         headers = ['a', 'band', 'k', 'frequency', 'wavelength', 'angle'],
         sort_by = 'a'):
@@ -35,7 +37,7 @@ class Analyze2D():
         plt.rcParams["mathtext.fontset"] = "dejavuserif"
         plt.rcParams['font.size'] = 14
 
-        data_loader = self.CSVLoader(datafile=datafile, file_suffix=file_suffix, 
+        data_loader = CSVLoader(datafile=datafile, file_suffix=file_suffix, 
             headers=headers, sort_by=sort_by)
         self._init_analysis(data_loader)
     
@@ -44,85 +46,6 @@ class Analyze2D():
         self.data = dataAnalysis(data_loader.data)
         # TODO: now replace every self.calc_err 
         # with data.calc_err etc. 
-
-    def _interp_angle(self, wavelength, a, band='0'):
-        """Interpolate between two points of data to find angle at desired 
-        wavelength for given band e.g. wavelength=250nm -> interpolate angle
-        between between points 240nm and 260nm
-        
-        Params:
-        wavelength (float): desired wavelength (in m or same unit as data) at
-            which to solve for angle 
-        a (str): key for unit cell size in data dictionary
-        """
-        i = 0
-        band = str(band)
-        # make sure in ascending order for line 
-        # "while float(wl[i]) < wavelength"
-        self.sort_data('wavelength') 
-        wl = self.data[a][band]['wavelength']
-        th = self.data[a][band]['angle']
-        
-        while float(wl[i]) < wavelength:
-            i += 1 # condition stops when data point is greater than
-                   # wavelength, so look at i and i-1 for correct range
-            if i > len(wl):
-                raise ValueError("Failed to find angles for wavelength =",
-                                 wavelength,
-                                 ". Check that it exists in data.")
-        if wl[i-1] > wavelength: 
-            # wl[i-1] should be the value smaller than desired wavelength
-            print("Wavelength too small! Changing", wavelength, "to", wl[i-1])
-            print("Dataset doesn't seem to match desired wavelength range, "
-                  "expect strange results (it is likely that the angles "
-                  "found will not be anywhere near the vertical line")
-            wavelength = wl[i-1]
-        elif wl[i] < wavelength: 
-            # wl[i] should be the value larger than desired wavelength
-            print("Wavelength too large! Changing", wavelength, "to", wl[i])
-            raise Warning("Dataset doesn't seem to match desired wavelength "
-                          "range, expect strange results (it is likely that "
-                          "the angles found will not be anywhere near the "
-                          "vertical line")
-            wavelength = wl[i]
-
-        if (wl[i]-wl[i-1]) < 1.e-15*(th[i]-th[i-1]): # avoid division by zero
-            angle = (th[i]+th[i-1])/2 # take average if angle is multivalued
-                                      # if wl1 and wl2 are the same
-        else:
-            angle = (th[i]-th[i-1])/(wl[i]-wl[i-1])*(wavelength-wl[i-1]) \
-                + th[i-1] # grad*(wavelength1-wavelength0) + angle0
-        print("found", (wavelength,angle), "between", (wl[i], th[i]), \
-              "and", (wl[i-1], th[i-1]) )
-        return wavelength, angle, i
-
-    def find_angle(self, wl_range=[250.0e-9, 500.0e-9], filename=None,\
-                  band='0'):
-        """Get Cherenkov angles for wavelength range wl_range
-        
-        Params:
-        filename (str): name of file that 'a', average Cherenkov
-            angle, chromatic error in 250-500nm wavelength range is stored
-        
-        Returns:
-        Single mode (see csvloader.py):
-            Cherenkov angle average and range (when in single mode)
-        Merged or split mode:
-            None
-        """
-        band = str(band)
-        for a in self.data:
-            for band in self.data[a]:
-                print("Finding angle for a =", a, "band", band)
-                wl1, wl2, average, rnge = self.calc_err(wl_range, a=a, band=band)
-                array = np.array([wl1, wl2, average, rnge, float(a)])
-                self.data[a][band]['cherenkov'] = array.tolist()  # json friendly
-                # self.data[a][band][str(wl1)+'-']
-
-        # print(average, rnge)
-        if self.format is 'single':
-            return average, rnge
-        return # dont return average and range if computed for multiple values of 'a', these are stored in file.
 
     def cropped_plot(self, filename=None, modelname=None, band=0, a_i=0,\
                     key=None, wl_range=[250e-9, 500e-9]):
@@ -137,14 +60,14 @@ class Analyze2D():
         """
         #raise NotImplementedError
         if key is None:
-            a = list(self.data)[a_i]
+            a = list(self.data.data_dict)[a_i]
         #print(a)
         wl1, th1, i = self._interp_angle(250e-9, a, band)
         wl2, th1, j = self._interp_angle(500e-9, a, band)
         #j += 1 # get j for wavelength > 500nm
         fig = plt.figure(figsize=(10,8))
-        wl = self.data[a][band]['wavelength'][i-1:j+1] # TODO: key error here
-        angle = self.data[a][band]['angle'][i-1:j+1]
+        wl = self.data.data_dict[a][band]['wavelength'][i-1:j+1] # TODO: key error here
+        angle = self.data.data_dict[a][band]['angle'][i-1:j+1]
 
         ax = fig.add_subplot(111)
         wl = np.array(wl)*1e9
@@ -179,20 +102,20 @@ class Analyze2D():
         bands list[int/str]: Bands to plot, if None plot all (count from 0)
         """
         if a is None:
-            a = list(self.data)[a_i]
+            a = list(self.data.data_dict)[a_i]
         if bands is None:
-            bands = list(self.data[a])
+            bands = list(self.data.data_dict[a])
         else:
             bands = [str(b) for b in bands]
-        #print(self.data[a][band]['angle'])
+        #print(self.data.data_dict[a][band]['angle'])
         fig = plt.figure(figsize=(10,8))
         ax = fig.add_subplot(111)
-        for band in self.data[a]:
+        for band in self.data.data_dict[a]:
             if band not in bands: 
                 continue
             print(band)
-            w = self.data[a][band]['wavelength']
-            th = self.data[a][band]['angle']
+            w = self.data.data_dict[a][band]['wavelength']
+            th = self.data.data_dict[a][band]['angle']
             w = np.array(w)*1e9
             # mask angle of 0 to prevent line being drawn to it
             th = np.ma.array(th)
@@ -230,14 +153,15 @@ class Analyze2D():
         """
         # matrix of data
         band = str(band)
-        lists = [ np.array([None]*len(self.data)) for _ in self.data]
+        lists = [np.array([None]*len(self.data.data_dict)) \
+            for _ in self.data.data_dict]
         wl1, wl2, angle, err, a, = \
             lists[0], lists[1], lists[2], lists[3], lists[4]
 
-        for i, a_key in enumerate(self.data):
+        for i, a_key in enumerate(self.data.data_dict):
             wl1[i], wl2[i], angle[i], err[i], a[i] = \
-                self.data[a_key][band]['cherenkov']
-            print(self.data[a_key][band]['cherenkov'])
+                self.data.data_dict[a_key][band]['cherenkov']
+            print(self.data.data_dict[a_key][band]['cherenkov'])
         # exclude different wavelength ranges?
         #print(angle, err, a)
         fig = plt.figure(figsize = (10,8))
@@ -274,48 +198,40 @@ class Analyze2D():
         bands (list[int]): List of bands in plot and save. If [None] do all
         a_s (list[str]): List of a (keys) to plot and save. If [None] do all
         """
-        for a_i, a in enumerate(self.data):
+        for a_i, a in enumerate(self.data.data_dict):
             if a not in a_s and a_s[0] is not None:
                 continue
             modelname_a = modelname + r" $a=$" + a + "m"
 
-            for band in self.data[a]:
-                wl = self.data[a][band]['wavelength']
-                th = self.data[a][band]['angle']
+            for band in self.data.data_dict[a]:
+                wl = self.data.data_dict[a][band]['wavelength']
+                th = self.data.data_dict[a][band]['angle']
                 if int(band) not in bands and bands[0] is not None:
                     continue
                 effective.compare_medium(
                     th, wl, ratio_2d, index=index, band=band, 
                     n_lim=[1.02,1.1],
                     modelname=modelname_a, filename=filename+str(a_i))
-    
-    def save_table(self, filename):
-        """Save Cherenkov analysis data into a table"""
-        matrix = np.empty((0,5))
-        for a in self.data:
-            for b in self.data[a]:
-                line = np.array(self.data[a][b]['cherenkov'])
-                matrix = np.vstack((matrix, line))
-        print(matrix)
-        np.savetxt(filename, matrix)
             
     def photon_yield(self, beta=0.999, L=100.e-6, wl_range=[250.e-9, 500.e-9], \
                     root='default', band='0'):
             # raise NotImplementedError
             if root == 'default':
-                root = list(self.data)[0]
-            theta = self.data[root][band]['angle']
-            f = self.data[root][band]['frequency']
+                # takes first key as root if default
+                # this is already 'default' in 3d case
+                root = list(self.data.data_dict)[0]
+            theta = self.data.data_dict[root][band]['angle']
+            f = self.data.data_dict[root][band]['frequency']
             wl, theta = self.wl_cut(root, band, wl_range)
             wl, f = self.wl_cut(root, band, wl_range, 'frequency')
             n_p = photon_yield.compute(theta=theta, f=f, beta=0.999,
                                     L=L, n=None)
-            if 'yield' not in list(self.data[root][band]):
-                self.data[root][band]['yield'] = {
+            if 'yield' not in list(self.data.data_dict[root][band]):
+                self.data.data_dict[root][band]['yield'] = {
                     'range': [],
                     'L': [],
                     'n_photons': []
                 }
-            self.data[root][band]['yield']['range'].append(wl_range)
-            self.data[root][band]['yield']['L'].append(L)
-            self.data[root][band]['yield']['n_photons'].append(n_p)
+            self.data.data_dict[root][band]['yield']['range'].append(wl_range)
+            self.data.data_dict[root][band]['yield']['L'].append(L)
+            self.data.data_dict[root][band]['yield']['n_photons'].append(n_p)

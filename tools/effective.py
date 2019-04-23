@@ -58,12 +58,15 @@ def average_index(n1, n2, v1=None, v2=None, vr=None):
         n = vr*n1 + (1-vr)*n2
     return n
 
-def compare_medium(th, wl, ratio, index="sio2", \
+def compare_medium(n_data, wl, ratio, index="sio2", \
     wl_range = [250.e-9, 500.e-9], band=0, filename=None, modelname=None, \
     n_lim=None):
     """Compare expected refractive index/Cherenkov angle from 
-    Maxwell-Garnett formula to data from simulation.
+    Maxwell-Garnett formula to data from simulation. Analysis is valid
+    INSIDE the crystal, so wavelength derived from k not c/f
     Args:
+        n_data: refractive index calculated by sqrt(kx*kx+ky*ky+kz*kz)/k0
+        wl: wavelength inside the crystal, i.e. 2pi/k not c/f
         index (str): material refractive index in ./index/<index>.txt
             used to calculate expected index from effective medium.
         ratio_2d (float): ratio of dielectric to air in the plane
@@ -92,7 +95,7 @@ def compare_medium(th, wl, ratio, index="sio2", \
     # else:
     #     eff = e_index(1.0, eff_2d, ratio_3d)  # full 3d
     # n_eff = eff**0.5  # n = sqrt(eps)
-    n_data = 1./(np.cos(th)*beta)  # Cherenkov formula
+    # n_data = 1./(np.cos(th)*beta)  # Cherenkov formula
     # n_test = average_index(n_sio2_interp, 1.0, vr=0.106)
     n_eff = average_index(n_sio2_interp, 1.0, vr=ratio)
 
