@@ -1,12 +1,13 @@
-import numpy as np 
+import numpy as np
 import scipy.constants as const
+import json
 
 class dataAnalysis(object):
     """Class to handle wavelength cuts, sorting, angle finding etc."""
     def __init__(self, data):
         self.data_dict = data
         self._get_num_bands()
-        self.status = {}
+        self._rm_nan()
     
     def _get_num_bands(self):
         self.num_bands = {}
@@ -15,6 +16,33 @@ class dataAnalysis(object):
             for bands in self.data_dict[root]:
                 i += 1
             self.num_bands[root] = i
+
+    def _rm_nan(self):
+        """Remove NaNs in data using a mask"""
+        for root in self.data_dict:
+            for band in self.data_dict[root]:
+                final_mask = None
+                for param in self.data_dict[root][band]:
+                    data = self.data_dict[root][band][param]
+                    band_len = len(self.data_dict[root][band]['band'])
+                    if type(data) is list and len(data) == band_len:
+                        nan_array = np.isnan(data)
+                        # print(nan_array[-1])
+                        # nan_list = [val is not 'nan' for val in data]
+                        if final_mask is None:
+                            final_mask = nan_array
+                        final_mask = np.logical_or(final_mask, nan_array)
+                final_mask = np.logical_not(final_mask)
+                for param in self.data_dict[root][band]:
+                    # do elementwise pop() instead of this strange conversion?
+                    band_len = len(self.data_dict[root][band]['band'])
+                    data = self.data_dict[root][band][param]
+                    if type(data) is list and len(data) == band_len:
+                        data = np.array(data)[final_mask].tolist()
+
+    def save(self, name):
+        with open(name, 'w') as f:
+            json.dump(self.data_dict, f)
 
     def find_angle(self, wl_range=[250.0e-9, 500.0e-9], filename=None,\
                   band='0'):
@@ -25,10 +53,7 @@ class dataAnalysis(object):
             angle, chromatic error in 250-500nm wavelength range is stored
         
         Returns:
-        Single mode (see csvloader.py):
-            Cherenkov angle average and range (when in single mode)
-        Merged or split mode:
-            None
+            tuple(float): Cherenkov angle average and range
         """
         band = str(band)
         for a in self.data_dict:
@@ -39,9 +64,7 @@ class dataAnalysis(object):
                 self.data_dict[a][band]['cherenkov'] = array.tolist()  # json friendly
                 # self.data_dict[a][band][str(wl1)+'-']
         # print(average, rnge)
-        if self.format is 'single':
-            return average, rnge
-        return 
+        return average, rnge
         # dont return average and range if computed 
         # for multiple values of 'a', these are stored in file.
     
@@ -54,23 +77,34 @@ class dataAnalysis(object):
                     print('refractive index already in data')
                     continue
                 if 'kx' in data and 'ky' in data and 'ky' in data:
-                    kx = data['kx']
-                    ky = data['ky']
-                    kz = data['kz']
-                    kabs = sqrt(kx*kx+ky*ky+kz*kz)
+                    kx = np.array(data['kx'])
+                    ky = np.array(data['ky'])
+                    kz = np.array(data['kz'])
+                    kabs = np.sqrt(kx*kx+ky*ky+kz*kz)
                 elif 'kz' in data and 'k_rho' in data:
-                    kz = data['kz']
-                    k_rho = data['k_rho']
-                    kabs = sqrt(k_rho*k_rho+kz*kz) 
+                    kz = np.array(data['kz'])
+                    k_rho = np.array(data['k_rho'])
+                    kabs = np.sqrt(k_rho*k_rho+kz*kz) 
                 else:
                     raise ValueError("No kx, ky and kz in dataset")
-                k0 = 2*np.pi*data['frequency']/const.c # omega/c
-                data['neff'] = kabs/k0
-                data['wl_in'] = 2*np.pi/kabs
+                f = np.array(data['frequency'])
+                k0 = 2*np.pi*f/const.c # omega/c
+                neff = kabs/k0
+                wl_in = 2*np.pi/kabs
+                th_in = np.arctan(kz/np.sqrt(kx*kx+ky*ky))
+                wl_nan = np.isnan(wl_in)  # deal with NaNs
+                th_nan = np.isnan(th_in)
+                neff_nan = np.isnan(neff)
+                nan_mask = np.logical_or(wl_nan, th_nan, neff_nan)
+                nan_mask = np.logical_not(nan_mask)
+                data['n_eff'] = neff[nan_mask].tolist()
+                data['wl_in'] = wl_in[nan_mask].tolist()
+                data['th_in'] = th_in[nan_mask].tolist()
+                # print(neff)
     
-    def wl_in(self):
+    def calcuate_inside(self):
         """compute wavelength inside crystal, already done by n_eff"""
-        raise NotImplementedError
+        self.calculate_n_eff()
 
     def calc_err(self, wl_range, a='default', band='0', sign=1):
         """Find chromatic error and remove negative/positive angles between
@@ -92,7 +126,7 @@ class dataAnalysis(object):
         wl_pos, th_pos = self.wl_cut(a, band)  # take positive angles
         self.data_dict[a][band]['angle'] = th_pos
         self.data_dict[a][band]['wavelength'] = wl_pos
-        print(wl_pos)
+        # print(wl_pos)
 
         wl_interp1, angle_interp1, i1 = \
             self._interp_angle(wl_range[0], a, band)
@@ -112,8 +146,6 @@ class dataAnalysis(object):
         return wl_interp1, wl_interp2, mean, err
 
     def _interp_angle(self, wavelength, a='default', band='0'):
-        raise NotImplementedError
-
         """Interpolate between two points of data to find angle at desired 
         wavelength for given band e.g. wavelength=250nm -> interpolate angle
         between between points either side of 250nm
@@ -170,6 +202,7 @@ class dataAnalysis(object):
         wl_nm_range = []
         param_nm_range = []
         theta = self.data_dict[root][band]['angle']
+        wl = self.data_dict[root][band]['wavelength']
         if param_key is not None:
             # print(self.data['default'][band]['cherenkov'])
             print('cutting for', param_key)
@@ -242,7 +275,8 @@ class dataAnalysis(object):
                             # print("sorting", param)
                             data[param] = \
                             [data[param][ind] for ind in sort_index]
-                    # print(sorted(self.data_dict[root][band][key])==self.data_dict[root][band][key])
+
+# ============================================================================
 
 class dataAnalysis3D(dataAnalysis):
     """Data analysis class for 3D models, requires intersection of electron
@@ -251,14 +285,14 @@ class dataAnalysis3D(dataAnalysis):
         self.data_full = data  # includes full Brillouin zone data
         self.data_dict = {}  # same structure as in 2D case
         self._init_data_dict(data)
-        return super().__init__(data)
+        self._get_num_bands()
     
     def _init_data_dict(self, data):
-        data_dict = {}
+        self.data_dict = {}
         for root in self.data_full:
-            data_dict[root] = {}
+            self.data_dict[root] = {}
             for band in self.data_full[root]:
-                data_dict[root][band] = {}
+                self.data_dict[root][band] = {}
     
     def calculateCherenkov(self, beta=0.999, direction = [1,0],
                           wl_range=[250.e-9,500.e-9]):
@@ -273,7 +307,7 @@ class dataAnalysis3D(dataAnalysis):
         """
         for band in self.data_full['default']:
             m_rho = self.data_full['default'][band]['mi']  # matrix of k_rho values
-            mz = np.copy(self.data_dict['default'][band]['mz'])  # mutated so copy
+            mz = np.copy(self.data_full['default'][band]['mz'])  # mutated so copy
             my = self.data_full['default'][band]['my']  # matrix of ky values
             mx = self.data_full['default'][band]['mx']  # matrix of kx values
             mf = np.copy(self.data_full['default'][band]['mf'])  # mutated so copy
@@ -318,7 +352,9 @@ class dataAnalysis3D(dataAnalysis):
             if len(self.data_dict['default'][band]['kz']) == 0:
                 raise Warning("No intersection found between electron plane "
                             "and dispersion plane,")
-            self.status['intersected'] = True
+            # self.status['intersected'] = True
+            # self._rm_nan()  # remove NaNs # needs fixing for 3D case (add bands key)
+            self.calculate_n_eff()
 
     def _cross(self, beta, kz, kz2, k_rho, k_rho2, f, fz2,
                f_rho2, direction):

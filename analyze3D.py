@@ -15,6 +15,7 @@ from matplotlib import cm
 import ckvpy.tools.effective as effective
 import ckvpy.tools.photon_yield as photon_yield
 from ckvpy.tools.bz2d import Bzone2D
+from ckvpy.tools.analysis import dataAnalysis3D
 
 __all__ = ['Analyze3D']
 
@@ -52,7 +53,7 @@ class Analyze3D():
     def _init_analysis(self, data_loader):
         """Pass data dictionary to dataAnalysis object, access raw data with
         self.data.data_dict[keys]"""
-        self.data = dataAnalysis(data_loader.data) 
+        self.data = dataAnalysis3D(data_loader.data) 
         # TODO: now replace every self.calc_err 
         # with data.calc_err etc. and self.data=>self.data.data_dict (avoid this?):
         # __getitem__(self, key):
@@ -60,7 +61,7 @@ class Analyze3D():
 
     def plotRange(self):
         """Plot effect of wavelength range on chromatic error and angle"""
-        for band in self.data['default']:
+        for band in self.data.data_dict['default']:
             wl_low_a = []
             mean_a = []
             err_a = []
@@ -167,11 +168,11 @@ class Analyze3D():
         fig = plt.figure(figsize=(12,9))
 
         for i, band in enumerate(self.data.data_dict['default']):
-            print(self.data.data_dict.keys())
-            print(self.data.data_dict['default'][band].keys())
-            mf = self.data.data_dict['default'][band]['mf']
-            m_rho = self.data.data_dict['default'][band]['mi']
-            mz = self.data.data_dict['default'][band]['mj']
+            print(self.data.data_full.keys())
+            print(self.data.data_full['default'][band].keys())
+            mf = self.data.data_full['default'][band]['mf']
+            m_rho = self.data.data_full['default'][band]['mi']
+            mz = self.data.data_full['default'][band]['mj']
 
             ax = fig.add_subplot(1,1,1, projection='3d')
             global_max = np.max([np.max(m_rho), np.max(mz)])

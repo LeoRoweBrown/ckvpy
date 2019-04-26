@@ -4,7 +4,7 @@ import os
 
 # TODO: change to deal purely with refractive index (not dielectric constant)
 # no lomnger using Maxwell-Garnett?
-def e_index(E_matrix, E_inclusion, ratio):
+def maxwell_garnett_index(E_matrix, E_inclusion, ratio):
     """
     variables:
     E_matrix: (float) dielectric constant of matrix material
@@ -58,9 +58,9 @@ def average_index(n1, n2, v1=None, v2=None, vr=None):
         n = vr*n1 + (1-vr)*n2
     return n
 
-def compare_medium(n_data, wl, ratio, index="sio2", \
-    wl_range = [250.e-9, 500.e-9], band=0, filename=None, modelname=None, \
-    n_lim=None):
+def compare_medium(n_data, th_in, wl_in, ratio, index="sio2", \
+    band=0, filename=None, modelname=None, \
+    n_lim=None, beta=0.999):
     """Compare expected refractive index/Cherenkov angle from 
     Maxwell-Garnett formula to data from simulation. Analysis is valid
     INSIDE the crystal, so wavelength derived from k not c/f
@@ -80,11 +80,11 @@ def compare_medium(n_data, wl, ratio, index="sio2", \
     print("Reading from", index_file)
 
     wl_sio2, n_sio2 = np.loadtxt(index_file).T
-    # print(wl)
-    ind = np.argsort(wl)
-    wl = np.array([wl[i] for i in ind])
-    th = np.array([th[i] for i in ind])
-    n_sio2_interp = np.interp(wl, wl_sio2, n_sio2)
+    # print(wl) # TODO: Handle NaNs in data
+    ind = np.argsort(wl_in)
+    wl_in = np.array([wl_in[i] for i in ind])
+    th_in = np.array([th_in[i] for i in ind]) # unused at the moment
+    n_sio2_interp = np.interp(wl_in, wl_sio2, n_sio2)
     e_sio2 = n_sio2_interp*n_sio2_interp
     # volume ratio 2d
     # volume ratio z direction
@@ -97,20 +97,23 @@ def compare_medium(n_data, wl, ratio, index="sio2", \
     # n_eff = eff**0.5  # n = sqrt(eps)
     # n_data = 1./(np.cos(th)*beta)  # Cherenkov formula
     # n_test = average_index(n_sio2_interp, 1.0, vr=0.106)
+    n_mg = np.sqrt(maxwell_garnett_index(1.0, e_sio2, ratio))
     n_eff = average_index(n_sio2_interp, 1.0, vr=ratio)
-
-    th_eff = np.arccos(1./beta*n_eff)
+    # print(wl_in)
+    # th_eff = np.arccos(1./beta*n_eff)
     fig = plt.figure(figsize=(10,8))
     ax = fig.add_subplot(111)
-    ax.plot(wl*1e9, n_eff, label="Effective medium theory", \
-        color='black', linestyle='dotted', marker='*', markersize=6)
-    ax.plot(wl*1e9, n_data,
-        label="Simulation", color='black', marker='o',\
+    ax.plot(wl_in*1e9, n_eff, label="Effective medium theory "
+        "(Volume-weighted Average)", \
+        color='black', linestyle='dotted', marker='None', markersize=6)
+    ax.plot(wl_in*1e9, n_data,
+        label="Simulation",  linestyle='None', color='black', marker='o',\
         markersize=6)
-    # ax.plot(wl*1e9, n_test, label="Effective medium theory volume", \
-    #     color='black', linestyle='--', marker='*', markersize=6)
-    ax.set_xlim([np.min(wl),1000])
-    ax.set_xticks(np.arange(np.min(wl)-100, 1000+100, 100))
+    ax.plot(wl_in*1e9, n_mg, label="Effective medium theory "
+        "(Maxwell-Garnett)",
+        color='black', linestyle='--', marker='None', markersize=6)
+    # ax.set_xlim([np.min(wl_in),1000])
+    ax.set_xticks(np.arange(np.min(wl_in)-100, 1000+100, 100))
     # ax.set_ylim([np.min(n_eff)-0.005, np.max(n_data)+0.005])
     global_max = max([np.max(n_eff), np.max(n_data)])
     global_min = min([np.min(n_eff), np.min(n_data)])
@@ -119,6 +122,7 @@ def compare_medium(n_data, wl, ratio, index="sio2", \
     if n_lim is None:
         n_lim = global_min, global_max
     ax.set_ylim(n_lim)
+    ax.set_xlim([0,1000])
 
     title = ("Effective Index Comparison Between Theory and "
             "Simulation for \n (Band " + str(int(band)+1) + ")")
@@ -128,19 +132,19 @@ def compare_medium(n_data, wl, ratio, index="sio2", \
     ax.set_xlabel(r"Wavelength $\lambda$ (nm)")
     ax.set_ylabel(r"Refractive index $n_{eff}$")
     ax.legend()
-    ax1 = ax.twinx() # fig.add_subplot(212)
-    ax1.set_xlim([np.min(wl),600])
+    # ax1 = ax.twinx() # fig.add_subplot(212)
+    # ax1.set_xlim([np.min(wl_in),600])
     
-    yl = np.arccos(1./beta*n_lim[0])
-    yh = np.arccos(1./beta*n_lim[1])
-    ax1.set_ylim([yl, yh])
-    ax1.set_yticks(np.arange(np.round(yl*2.0, 2)/2.0, \
-        yh+0.005, 0.01))
-    ax1.set_xlabel(r"Wavelength $\lambda$ (nm)")
-    ax1.set_ylabel(r"Saturated Cherenkov Angle $\theta_c$ (rad)")
+    yl = np.arccos(1./(beta*n_lim[0]))
+    yh = np.arccos(1./(beta*n_lim[1]))
+    # ax1.set_ylim([yl, yh])
+    # ax1.set_yticks(np.arange(np.round(yl*2.0, 2)/2.0, \
+    #     yh+0.005, 0.01))
+    # ax1.set_xlabel(r"Wavelength $\lambda$ (nm)")
+    # ax1.set_ylabel(r"Saturated Cherenkov Angle $\theta_c$ (rad)")
     if filename is None:
-        fig.savefig("effective_index"+str(band)+"test.png")
+        fig.savefig("untitled_effective_index"+str(band)+"test.png")
     else:
         fig.savefig(filename+str(band)+".png")
-    # fig.show()
     plt.close()
+    return n_mg, n_eff

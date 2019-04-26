@@ -16,8 +16,8 @@ class Analyze2D():
     """For plotting analysed data for case of 2D model, most actual analysis
     takes place in analysis.py which contains data analysis classes"""
     def __init__(self, datafile, file_suffix = 'undefined', \
-        headers = ['a', 'band', 'k', 'frequency', 'wavelength', 'angle'],
-        sort_by = 'a'):
+        headers = ['a', 'band', 'k', 'frequency', 'wavelength', 'angle',
+        'kx', 'ky', 'kz'], sort_by = 'a', beta=0.999):
         """Analyses  Chernekov data (in a single k-in-plane direction)
         for a 2D model from a CSV file of wavelengths and angles 
         Inherits from CSVLoader class in tools.py
@@ -25,12 +25,12 @@ class Analyze2D():
         """
         # may change structure to include header_list only in base class
         header_list = \
-        ['band', 'k', 'frequency', 'wavelength', 'angle', 'a', 'l', 'skip'
+        ['band', 'k', 'frequency', 'wavelength', 'angle', 'a', 'l', 'skip',
          'kx', 'ky', 'kz', 'n']
         # np.set_printoptions(precision=3)
         for header in headers:
             if header not in header_list:
-                raise ValueError("Invalid header supplied, use one of",
+                raise ValueError("Invalid header supplied, use one of ",
                                  header_list)
         self.mpl_lines = itertools.cycle(["-",":","--","-.",])
         plt.rcParams["font.family"] = "serif"
@@ -40,6 +40,8 @@ class Analyze2D():
         data_loader = CSVLoader(datafile=datafile, file_suffix=file_suffix, 
             headers=headers, sort_by=sort_by)
         self._init_analysis(data_loader)
+        self.path = data_loader.path
+        self.beta = beta
     
     def _init_analysis(self, data_loader):
         """Pass data dictionary to dataAnalysis object"""
@@ -50,7 +52,7 @@ class Analyze2D():
     def cropped_plot(self, filename=None, modelname=None, band=0, a_i=0,\
                     key=None, wl_range=[250e-9, 500e-9]):
         """Plot wavelength against angle in 250-500nm wavelength range for a_ith unit cell size
-
+        !!Untested at the moment!!
         Params:
         filename (str): Filename of exported graph
         modelname (str): String appended to title to distinguish graphs of different models
@@ -82,9 +84,9 @@ class Analyze2D():
 
         if filename is not None:
             fig.savefig(filename, bbox_inches='tight')
+            plt.close()
         else:
-            fig.show()
-        plt.close()
+            plt.show()
     
     def full_plot(self, filename=None, modelname=None, \
         a_i=0, a=None, dump=False, bands=None):
@@ -141,9 +143,9 @@ class Analyze2D():
         if filename is not None:
             print("Saving as", filename)
             fig.savefig(filename, bbox_inches='tight')
+            plt.close()
         else:
-            fig.show()
-        fig.close()
+            plt.show()
 
     def a_plot(self, filename=None, modelname=None, band='0'):
         """Plot 'a' against Cherenkov angle and chromatic error
@@ -179,16 +181,19 @@ class Analyze2D():
         ax.set_xlabel(r"Unit cell dimension $a$ (m)")
 
         ax.set_ylabel(r"Average Saturated Cherenkov Angle $\theta_c$ (rad)")
-        fig.show()
         if filename is not None:
             print("Saving as", filename)
             fig.savefig(filename, bbox_inches='tight')
+            plt.close()
         else:
-            fig.show()
+            plt.show()
+
+    def close_plots(self):
         plt.close()
 
-    def compare_sio2(self, ratio_2d=0.1, modelname='', filename='',
-                     index="sio2", bands=[None], a_s=[None]):
+    def compare_sio2(self, ratio_2d=0.1, modelname='', filename='', 
+                     index="sio2", bands=[None], a_s=[None], 
+                     wl_range=[250.e-9,500.e-9], n_lim=[1.02,1.1]):
         """Compare Cherenkov behaviour in simulation to predicted from
         Maxwell Garnett and plot with tools.effective.compare_medium()
         ratio_2d (float): Volume ratio between air and SiO2
@@ -197,22 +202,66 @@ class Analyze2D():
             band appended, i.e. for a = 1e-7, 2e-7 index of a for 1e-7 is 0)
         bands (list[int]): List of bands in plot and save. If [None] do all
         a_s (list[str]): List of a (keys) to plot and save. If [None] do all
+        wl_range (list[float]): Wavelength range to compare average refractive
+            indices of theory and data 
         """
+        self.data.calculate_n_eff()  # calculate n inside crystal using data
         for a_i, a in enumerate(self.data.data_dict):
             if a not in a_s and a_s[0] is not None:
                 continue
-            modelname_a = modelname + r" $a=$" + a + "m"
+            modelname_a = modelname + r"$a=$" + a + "m"
 
             for band in self.data.data_dict[a]:
-                wl = self.data.data_dict[a][band]['wavelength']
-                th = self.data.data_dict[a][band]['angle']
+                print(band)
+                n_data = self.data.data_dict[a][band]['n_eff']
+                wl_in = self.data.data_dict[a][band]['wl_in']
+                th_in = self.data.data_dict[a][band]['th_in']
                 if int(band) not in bands and bands[0] is not None:
+                    print('Ignoring band', band)
                     continue
-                effective.compare_medium(
-                    th, wl, ratio_2d, index=index, band=band, 
-                    n_lim=[1.02,1.1],
-                    modelname=modelname_a, filename=filename+str(a_i))
-            
+                print(filename+'a'+str(a_i)+'band')
+                n_mg, _ = effective.compare_medium(
+                    n_data, th_in, wl_in, ratio_2d, index=index, band=band, 
+                    n_lim=n_lim, beta=self.beta, modelname=modelname_a,
+                    filename=filename+'a'+str(a_i)+'band')
+                self.data.data_dict[a][band]['neff_mg'] = n_mg.tolist()
+                # print(n_data, n_mg)
+                for r in range(len(wl_range)):
+                    i = 0
+                    w = 0.
+                    while w < wl_range[r] and i < len(wl_in):
+                        w = wl_in[i]
+                        if i+1 >= len(wl_in):
+                            print("could not find", wl_range[r])
+                            print("using", wl_in[i])
+                            j = i
+                        else:
+                            wl1_diff = wl_in[i+1] - wl_range[r]
+                            wl2_diff = wl_range[r] - wl_in[i]
+                            if abs(wl1_diff) > abs(wl2_diff):
+                                j = i
+                            else:
+                                j = i+1
+                        i += 1
+                    if r == 0:
+                        i1 = j
+                    else:
+                        i2 = j+1
+                n_mg_av = np.mean(n_mg[i1:i2])
+                n_data_av = np.mean(n_data[i1:i2])
+                n_mg_err = np.std(n_mg[i1:i2])/(i2-i1)**0.5
+                n_data_err = np.std(n_data[i1:i2])/(i2-i1)**0.5
+                self.data.data_dict[a][band]['n_data_mean'] = \
+                    [n_data_av, n_data_err]
+                self.data.data_dict[a][band]['n_mg_mean'] = \
+                    [n_mg_av, n_mg_err]
+                print('a:', a, 'band:', band, 'n_data', n_data_av, '+-', \
+                    n_data_err)
+                print('a:', a, 'band:', band, 'n_mg', n_mg_av, '+-', \
+                    n_mg_err)
+                # print(n_data)
+                # print(wl_in)
+
     def photon_yield(self, beta=0.999, L=100.e-6, wl_range=[250.e-9, 500.e-9], \
                     root='default', band='0'):
             # raise NotImplementedError
