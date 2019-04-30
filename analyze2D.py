@@ -225,31 +225,35 @@ class Analyze2D():
                     n_lim=n_lim, beta=self.beta, modelname=modelname_a,
                     filename=filename+'a'+str(a_i)+'band')
                 self.data.data_dict[a][band]['neff_mg'] = n_mg.tolist()
-                # print(n_data, n_mg)
-                for r in range(len(wl_range)):
+                # find n where wl_range[0] < wavelength < wl_range[1]
+                for r in range(len(wl_range)): # lower and upper range e.g.
+                                               # wl_range = [250e-9, 500.e-9]
                     i = 0
                     w = 0.
+                    # loop stops once the data point w > wl_range[r]
                     while w < wl_range[r] and i < len(wl_in):
                         w = wl_in[i]
                         if i+1 >= len(wl_in):
                             print("could not find", wl_range[r])
                             print("using", wl_in[i])
-                            j = i
+                            j = i 
                         else:
                             wl1_diff = wl_in[i+1] - wl_range[r]
                             wl2_diff = wl_range[r] - wl_in[i]
+                            # decide data point by its proximity to
+                            # wl_range[r]
                             if abs(wl1_diff) > abs(wl2_diff):
                                 j = i
                             else:
                                 j = i+1
-                        i += 1
+                        i += 1  # next data point
                     if r == 0:
                         i1 = j
                     else:
                         i2 = j+1
-                n_mg_av = np.mean(n_mg[i1:i2])
-                n_data_av = np.mean(n_data[i1:i2])
-                n_mg_err = np.std(n_mg[i1:i2])/(i2-i1)**0.5
+                n_mg_av = np.mean(n_mg[i1:i2])  # average maxwell garnett n
+                n_data_av = np.mean(n_data[i1:i2])  # average n from data
+                n_mg_err = np.std(n_mg[i1:i2])/(i2-i1)**0.5  # standard error
                 n_data_err = np.std(n_data[i1:i2])/(i2-i1)**0.5
                 self.data.data_dict[a][band]['n_data_mean'] = \
                     [n_data_av, n_data_err]
@@ -259,8 +263,6 @@ class Analyze2D():
                     n_data_err)
                 print('a:', a, 'band:', band, 'n_mg', n_mg_av, '+-', \
                     n_mg_err)
-                # print(n_data)
-                # print(wl_in)
 
     def photon_yield(self, beta=0.999, L=100.e-6, wl_range=[250.e-9, 500.e-9], \
                     root='default', band='0'):

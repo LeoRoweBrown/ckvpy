@@ -81,17 +81,21 @@ class dataAnalysis(object):
                     ky = np.array(data['ky'])
                     kz = np.array(data['kz'])
                     kabs = np.sqrt(kx*kx+ky*ky+kz*kz)
-                elif 'kz' in data and 'k_rho' in data:
+                    th_in = np.arctan(kz/np.sqrt(kx*kx+ky*ky))
+                elif 'kz' in data and 'k_rho' in data:  # 3D
+                    print("n_eff for 3D")
                     kz = np.array(data['kz'])
                     k_rho = np.array(data['k_rho'])
-                    kabs = np.sqrt(k_rho*k_rho+kz*kz) 
+                    kabs = np.sqrt(k_rho*k_rho+kz*kz)
+                    d_rho, dz = self.data_dict['default'][band]['direction']
+                    adj_for_e_diretion = np.arctan(dz/(d_rho+1e-20))
+                    th_in = np.arctan(kz/(k_rho+1e-20)) - adj_for_e_diretion
                 else:
                     raise ValueError("No kx, ky and kz in dataset")
                 f = np.array(data['frequency'])
                 k0 = 2*np.pi*f/const.c # omega/c
                 neff = kabs/k0
                 wl_in = 2*np.pi/kabs
-                th_in = np.arctan(kz/np.sqrt(kx*kx+ky*ky))
                 wl_nan = np.isnan(wl_in)  # deal with NaNs
                 th_nan = np.isnan(th_in)
                 neff_nan = np.isnan(neff)
@@ -206,7 +210,7 @@ class dataAnalysis(object):
         if param_key is not None:
             # print(self.data['default'][band]['cherenkov'])
             print('cutting for', param_key)
-            param = self.data[a][band][param_key]
+            param = self.data_dict[root][band][param_key]
         else:
             param = theta
         for i, w in enumerate(wl):
@@ -286,6 +290,11 @@ class dataAnalysis3D(dataAnalysis):
         self.data_dict = {}  # same structure as in 2D case
         self._init_data_dict(data)
         self._get_num_bands()
+        self.status = {
+            'reflected': True,
+            'interpolated': True,
+            'intersected': False
+        }
     
     def _init_data_dict(self, data):
         self.data_dict = {}
@@ -305,6 +314,8 @@ class dataAnalysis3D(dataAnalysis):
             wl_range list[int/float, int/float]: range of wavelength in nm
                 to analyse Cherenkov angle and chromatic error over
         """
+        if type(direction[0]) is not int or type(direction[1]) is not int:
+            raise ValueError("Only directions purely in z or rho supported")
         for band in self.data_full['default']:
             m_rho = self.data_full['default'][band]['mi']  # matrix of k_rho values
             mz = np.copy(self.data_full['default'][band]['mz'])  # mutated so copy
@@ -331,7 +342,7 @@ class dataAnalysis3D(dataAnalysis):
                     f = mf[kz_i, k_rho_i]  # f(kz,k_rho)
                     fz2 = mf[kz_i + 1, k_rho_i]  # f(kz2,k_rho)
                     f_rho2 = mf[kz_i, k_rho_i + 1]  # f(kz,k_rho2)
-                    # get crossing points and booleans
+                    # get crossing points and booleans (was crossing found?)
                     rho_found, rho_cross, z_found, z_cross = \
                         self._cross(beta, kz, kz2, k_rho, k_rho2, f, fz2,
                                     f_rho2, direction)
@@ -345,16 +356,18 @@ class dataAnalysis3D(dataAnalysis):
                         kz_c = np.append(kz_c, kz)
                         k_rho_c = np.append(k_rho_c, k_rho_cross)
                         f_c = np.append(f_c, f_rho_cross)
-            self.data_dict['default'][band]['kz'] = kz_c
-            self.data_dict['default'][band]['k_rho'] = k_rho_c
+            self.data_dict['default'][band]['kz'] = kz_c.tolist()
+            self.data_dict['default'][band]['k_rho'] = k_rho_c.tolist()
             # set back to f instead of omega
-            self.data_dict['default'][band]['frequency'] = f_c/(2*np.pi)
+            self.data_dict['default'][band]['frequency'] = \
+                (f_c/(2*np.pi)).tolist()
             if len(self.data_dict['default'][band]['kz']) == 0:
                 raise Warning("No intersection found between electron plane "
                             "and dispersion plane,")
-            # self.status['intersected'] = True
-            # self._rm_nan()  # remove NaNs # needs fixing for 3D case (add bands key)
-            self.calculate_n_eff()
+        self.status['intersected'] = True
+        # self._rm_nan()  # remove NaNs # needs fixing for 3D case (add bands key)
+        self.calculate_n_eff()
+        self._comp_angle()
 
     def _cross(self, beta, kz, kz2, k_rho, k_rho2, f, fz2,
                f_rho2, direction):
@@ -431,30 +444,27 @@ class dataAnalysis3D(dataAnalysis):
         
         return rho_found, rho, z_found, z
 
-    def analyze_error(self, band, wl_range=[250.e-9, 500.e-9], 
-                     theory_compare=True, wavelength_range=True):
-        """Calculate average cherenkov angle and error from angle against
-        wavelength data. Then have option to compare to effective medium
-        theory and calculate for different wavelength ranges."""
-        # TODO: make it obvious how to calculate neff - 
-        # sqrt(kx*kx+ky*ky+kz*kz)**2./k0 (do i use k_rho or kz in numerator)
-        kz = self.data_dict['default'][band]['kz']
-        k_rho = self.data_dict['default'][band]['k_rho']
-        f = self.data_dict['default'][band]['frequency']
-        d_rho, dz = self.data_dict['default'][band]['direction']
-        adj_for_e_diretion = np.arctan(dz/(d_rho+1e-20))
-        theta = np.arctan(kz/(k_rho+1e-20)) - adj_for_e_diretion
-        # then compute outside angle
-        np.tan(theta)
-        # wl = 2*np.pi*3.e8/f
-        # wl = 2.*np.pi/(kz**2.+k_rho**2.+1e-7)**0.5
-        wl = const.c/f
-        # print(print(wl)
-        # print(f)
-        wl_interp1, wl_interp2, mean, err = \
-            self.calc_err(wl_range)
-
-        array = np.array([wl_interp1, wl_interp2, mean, err])
-        self.data_dict['default'][band]['cherenkov'] = array.tolist()  # json friendly
-        self.save_table()
+    def _comp_angle(self):
+        """Find angles *outside* crystal using k-vectors."""
+        # everything else hard-codes 'default', might change
+        for root in self.data_dict:
+            for band in self.data_dict[root]:
+                kz = np.array(self.data_dict[root][band]['kz'])
+                k_rho = np.array(self.data_dict[root][band]['k_rho'])
+                f = np.array(self.data_dict[root][band]['frequency'])
+                d_rho, dz = self.data_dict[root][band]['direction']
+                # adj_for_e_diretion = np.arctan(dz/(d_rho+1e-20))
+                # theta = np.arctan(kz/(k_rho+1e-20)) - adj_for_e_diretion
+                k0 = np.sqrt(kz*kz + k_rho*k_rho)
+                # dz = 1, k_rho cons
+                if dz == 1: k_parallel = k_rho
+                elif d_rho == 1: k_parallel = kz
+                theta = np.arcsin(k_parallel/k0)
+                wl = const.c/np.array(f)
+                self.data_dict[root][band]['wavelength'] = wl.tolist()
+                self.data_dict[root][band]['angle'] = theta.tolist()
+                # print(print(wl)
+                # print(f)
+                # wl_interp1, wl_interp2, mean, err = \
+                #     self.calc_err(wl_range)
         

@@ -110,7 +110,7 @@ class Analyze3D():
 
     def plotCherenkov(self):
         """Plot Angle against Wavelength and Scatter plot of intersection"""
-        if not self.status['intersected']:
+        if not self.data.status['intersected']:
             print("Cherenkov angle has not been calculated, please use "
                   "calculateCherenkov(v=<speed>, direction=<[rho, z]>")
             return
@@ -140,10 +140,16 @@ class Analyze3D():
             kz = self.data.data_dict['default'][band]['kz']
             k_rho = self.data.data_dict['default'][band]['k_rho']
             f = self.data.data_dict['default'][band]['frequency']
+            wl, f_cut = self.data.wl_cut(
+                root='default', band='0', wl_range=[0.,1e10])
+            wl, th = self.data.wl_cut(
+                root='default', band='0', wl_range=[0.,1e10],
+                param_key = 'angle')
             wl = np.array(wl)
+            print(max(th))
             ax.plot(th, wl*1.e9, linestyle='None', marker='o', color='black')
             ax.set_xticks(np.arange(0,0.4+0.004, 0.05))  # angle
-            ax.set_xlim([0, max(th)+0.05])
+            ax.set_xlim([0, 0.4+0.05])
             global_max = max([np.max(kz), np.max(k_rho)])
             ax1.set_ylim([-global_max, global_max])
             ax1.set_xlim([-global_max, global_max])
@@ -158,10 +164,10 @@ class Analyze3D():
 
     def plot3d(self, mode='surface'):
         """Plot dispersion"""
-        if not self.status['reflected']:
+        if not self.data.status['reflected']:
             print("Reflecting")
             self.reflect()
-        if not self.status['interpolated']:
+        if not self.data.status['interpolated']:
             print("Interpolating")
             self.interpolate()
         print("Plotting")
@@ -195,9 +201,9 @@ class Analyze3D():
                 #surf = ax.plot_surface(m_rho, mz, m_rho*3.e8, cmap=cm.bwr,
                 #                       linewidth=0, antialiased=False)
             elif mode == 'scatter':
-                ax.scatter(self.data.data_dict['1']['k_rho'], \
-                    self.data.data_dict['1']['kz'], \
-                        self.data.data_dict['1']['frequency'])
+                ax.scatter(self.data.data_dict['default']['0']['k_rho'], \
+                    self.data.data_dict['default']['0']['kz'], \
+                        self.data.data_dict['default']['0']['frequency'])
                 # ax.scatter(m_rho, mz, mf)
             elif mode == 'eplane':
                 plane = ax.plot_surface(m_rho, mz, mz*0.999*3.e8, \
@@ -205,12 +211,12 @@ class Analyze3D():
                
             #ax.set_zlim([np.min(mf),np.max(mf)])
             fig.savefig("dispersion"+band+".png", bbox_inches='tight')
-            fig.show()
+            plt.show()
             plt.close()
 
     def compare_sio2(self, ratio_3d=0.106, index="sio2", \
         filename=None, modelname=None, n_lim=None):
-        if not self.status['intersected']:
+        if not self.data.status['intersected']:
             print("Cherenkov angle has not been calculated, please use "
                   "calculateCherenkov(v=<speed>, direction=<[rho, z]>")
             return
@@ -218,12 +224,15 @@ class Analyze3D():
         # volume ratio z direction
         # if ratio_3d is None:
         #     ratio_3d = 100./250.
-        for band in self.data_dict['default']:
-            n_data = self.data_dict['default']['band']['neff']
-            wl = self.data.data_dict['default'][band]['wavelength']
-            effective.compare_medium(n_data, wl, ratio_3d, index=index,
-                                    band=band, filename=filename,
-                                    modelname=modelname, n_lim=[1.035,1.1])
+        for band in self.data.data_dict['default']:
+            n_data = self.data.data_dict['default'][band]['n_eff']
+            wl_in = self.data.data_dict['default'][band]['wl_in']
+            th_in = self.data.data_dict['default'][band]['th_in']
+            effective.compare_medium(
+                n_data, th_in, wl_in, ratio_3d, 
+                index=index, band=band, filename=filename, 
+                modelname=modelname, n_lim=[1.035,1.1]
+                )
 
     def photon_yield(self, beta=0.999, L=1.e-6, wl_range=[250.e-9, 500.e-9], \
                     root='default', band='0'):
@@ -231,8 +240,8 @@ class Analyze3D():
         theta = self.data.data_dict['default'][band]['cherenkov']['angle']
 
         f = self.data.data_dict['default'][band]['cherenkov']['frequency']
-        _, theta = self.wl_cut(root, band, wl_range=wl_range)
-        _, f = self.wl_cut(root, band, wl_range, 'frequency') # TODO: move
+        _, theta = self.data.wl_cut(root, band, wl_range=wl_range)
+        _, f = self.data.wl_cut(root, band, wl_range, 'frequency') # TODO: move
         # print(theta)
         # print('============')
         # print(f)

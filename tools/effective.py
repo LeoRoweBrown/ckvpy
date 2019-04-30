@@ -122,7 +122,7 @@ def compare_medium(n_data, th_in, wl_in, ratio, index="sio2", \
     if n_lim is None:
         n_lim = global_min, global_max
     ax.set_ylim(n_lim)
-    ax.set_xlim([0,1000])
+    ax.set_xlim([200,1000])  # Malitson SiO2 only valid from 200nm
 
     title = ("Effective Index Comparison Between Theory and "
             "Simulation for \n (Band " + str(int(band)+1) + ")")
