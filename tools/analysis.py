@@ -1,6 +1,7 @@
 import numpy as np
 import scipy.constants as const
 import json
+from matplotlib import pyplot as plt
 
 class dataAnalysis(object):
     """Class to handle wavelength cuts, sorting, angle finding etc."""
@@ -60,7 +61,11 @@ class dataAnalysis(object):
             for band in self.data_dict[a]:
                 print("Finding angle for a =", a, "band", band)
                 wl1, wl2, average, rnge = self.calc_err(wl_range, a=a, band=band)
-                array = np.array([wl1, wl2, average, rnge, float(a)])
+                if type(a) is str: 
+                    a_ = 0
+                else:
+                    a_ = a
+                array = np.array([wl1, wl2, average, rnge, float(a_)])
                 self.data_dict[a][band]['cherenkov'] = array.tolist()  # json friendly
                 # self.data_dict[a][band][str(wl1)+'-']
         # print(average, rnge)
@@ -88,14 +93,20 @@ class dataAnalysis(object):
                     k_rho = np.array(data['k_rho'])
                     kabs = np.sqrt(k_rho*k_rho+kz*kz)
                     d_rho, dz = self.data_dict['default'][band]['direction']
-                    adj_for_e_diretion = np.arctan(dz/(d_rho+1e-20))
-                    th_in = np.arctan(kz/(k_rho+1e-20)) - adj_for_e_diretion
+                    if dz == 1: 
+                        k_parallel = k_rho
+                        k_perp = kz
+                    elif d_rho == 1: 
+                        k_parallel = kz
+                        k_perp = k_rho
+                    th_in = np.arctan(k_parallel/(k_perp+1e-20))
                 else:
                     raise ValueError("No kx, ky and kz in dataset")
                 f = np.array(data['frequency'])
                 k0 = 2*np.pi*f/const.c # omega/c
                 neff = kabs/k0
                 wl_in = 2*np.pi/kabs
+
                 wl_nan = np.isnan(wl_in)  # deal with NaNs
                 th_nan = np.isnan(th_in)
                 neff_nan = np.isnan(neff)
@@ -104,6 +115,17 @@ class dataAnalysis(object):
                 data['n_eff'] = neff[nan_mask].tolist()
                 data['wl_in'] = wl_in[nan_mask].tolist()
                 data['th_in'] = th_in[nan_mask].tolist()
+                fig = plt.figure()
+                ax = fig.add_subplot(111, projection='3d')
+                ax.scatter(k_rho, kz, f, color='black')
+                plt.show()
+                plt.plot(data['th_in'], data['wl_in'],  marker='o', linestyle='None')
+                plt.show()
+                plt.plot(data['wl_in'], data['n_eff'], marker='o', linestyle='None')
+                plt.show()
+                plt.plot(data['angle'], data['wavelength'], marker='o', linestyle='None')
+                plt.show()
+                print(wl_in)
                 # print(neff)
     
     def calcuate_inside(self):
@@ -199,26 +221,65 @@ class dataAnalysis(object):
             "and", (wl[i-1], th[i-1]) )
         return wavelength, angle, i
 
-    def wl_cut(self, root='default', band='0', wl_range=[0.,1e10],\
-               sign=1, param_key=None):
+    def wl_cut(self, root='default', band='0', wl_range=(0.,1e10),\
+               sign=1, param_key=None, mutate=False):
         """Take cut of data based on wavelength range. Default behaviour
-        removes negative angles TODO: Fix out of range"""
+        removes negative angles"""
         wl_nm_range = []
         param_nm_range = []
-        theta = self.data_dict[root][band]['angle']
-        wl = self.data_dict[root][band]['wavelength']
-        if param_key is not None:
-            # print(self.data['default'][band]['cherenkov'])
-            print('cutting for', param_key)
-            param = self.data_dict[root][band][param_key]
-        else:
-            param = theta
-        for i, w in enumerate(wl):
-            if w < wl_range[1] and w > wl_range[0] and sign*theta[i]>0:
-                wl_nm_range.append(w)
-                param_nm_range.append(param[i])
+        list_param_nm_range = []
+        print(wl_range)
+        theta = self.data_dict[root][band]['angle'].copy()
+        wl = self.data_dict[root][band]['wavelength'].copy()
 
-        return wl_nm_range, param_nm_range
+        if param_key is 'all':
+            len_wl = len(wl)
+            param_key = [key for key in self.data_dict[root][band]\
+                if len(self.data_dict[root][band][key]) == len_wl]
+        if param_key is None:
+            param_key = ['angle']
+        if type(param_key) is str:
+            param_key = [param_key]
+        print('cutting for', param_key)
+        for n, key in enumerate(param_key):
+            param_nm_range = []
+            for i, w in enumerate(wl):
+                # print(theta[i], param[i])
+                # print(len(wl), len(self.data_dict[root][band][key]))
+                if w < wl_range[1] and w > wl_range[0] and sign*theta[i]>0:
+                    print("wavelength", w, w>wl_range[1])
+                    if n == 0: wl_nm_range.append(w)
+                    param = self.data_dict[root][band][key][i]
+                    param_nm_range.append(param)
+            if mutate:
+                self.data_dict[root][band][key] = param_nm_range
+                print(key)
+                print(np.mean(param_nm_range))
+            list_param_nm_range.append(param_nm_range)
+
+        if len(list_param_nm_range) == 1:
+            return wl_nm_range, param_nm_range
+        else:
+            return wl_nm_range, list_param_nm_range
+
+    def wl_rm(self, param_list=('all',), wl_range=(0.,1000.e-9)):
+        """same as wl_cut, but mutates dictionary and takes multiple params
+        TODO: This should be removed and combined with wl_cut and add 
+        option to mutate dictionary? DEPRECATED"""
+        for root in self.data_dict:
+            for band in self.data_dict[root]:
+                if param_list[0] is 'all':
+                    len_wl = len(self.data_dict[root][band]['wavelength'])
+                    param_list = [key for key in self.data_dict[root][band]\
+                        if len(self.data_dict[root][band][key]) == len_wl]
+                print(param_list)
+                wl_data = None
+                for param in param_list:
+                    wl_data, param_data = \
+                        self.wl_cut(root, band, wl_range, 1, param)
+                    self.data_dict[root][band][param] = param_data
+                    print(param, len(param_data))
+                self.data_dict[root][band]['wavelength'] = wl_data
 
     def save_table(self, filename):
         """Save Cherenkov analysis data into a table"""
@@ -302,7 +363,7 @@ class dataAnalysis3D(dataAnalysis):
             self.data_dict[root] = {}
             for band in self.data_full[root]:
                 self.data_dict[root][band] = {}
-    
+
     def calculateCherenkov(self, beta=0.999, direction = [1,0],
                           wl_range=[250.e-9,500.e-9]):
         """Find intersection of electron plane and dispersion to get
@@ -366,7 +427,6 @@ class dataAnalysis3D(dataAnalysis):
                             "and dispersion plane,")
         self.status['intersected'] = True
         # self._rm_nan()  # remove NaNs # needs fixing for 3D case (add bands key)
-        self.calculate_n_eff()
         self._comp_angle()
 
     def _cross(self, beta, kz, kz2, k_rho, k_rho2, f, fz2,
@@ -459,10 +519,21 @@ class dataAnalysis3D(dataAnalysis):
                 # dz = 1, k_rho cons
                 if dz == 1: k_parallel = k_rho
                 elif d_rho == 1: k_parallel = kz
+                # print(k_parallel)
+                # print(k_rho)
                 theta = np.arcsin(k_parallel/k0)
+                 #print(theta)
                 wl = const.c/np.array(f)
+                # fig = plt.figure()
+                # ax = fig.add_subplot(111, projection='3d')
+                # ax.scatter(k_rho, kz, f, color='black')
+                # plt.show()
+
                 self.data_dict[root][band]['wavelength'] = wl.tolist()
                 self.data_dict[root][band]['angle'] = theta.tolist()
+                self.wl_cut(root, band, wl_range=[0.,1000e-9],\
+                    sign=1, param_key='all', mutate=True)
+                self.calculate_n_eff()
                 # print(print(wl)
                 # print(f)
                 # wl_interp1, wl_interp2, mean, err = \

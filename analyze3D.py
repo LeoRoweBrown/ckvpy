@@ -27,8 +27,8 @@ class Analyze3D():
     kz,ky because of the way bands are found: a direction of k is chosen
     and increase |k|. Always sorted by band (band is the root key)""" 
     def __init__(self, datafile, symmetry=4, headers=['skip', 'band', 'skip',
-                 'frequency', 'kx', 'ky', 'kz', 'n', 'skip'],
-                 ndim=3, resolution=100):
+                 'frequency', 'kx', 'ky', 'kz', 'n', 'skip'], add_zero=False,
+                 ndim=3, resolution=100, interpolation_method='cubic'):
 
         # plt.rcParams.update({'font.size': 14})
         plt.rcParams["font.family"] = "serif"
@@ -45,8 +45,10 @@ class Analyze3D():
                     "Invalid header supplied, must be one of "
                     "['band', 'frequency', 'kx', 'ky', 'kz', 'n']")
         
-        data_loader = Bzone2D(datafile, headers=headers, ndim=ndim,
-                              symmetry=symmetry, resolution=resolution)
+        data_loader = Bzone2D(
+            datafile, headers=headers, ndim=ndim, symmetry=symmetry, 
+            interpolation_method='cubic', resolution=resolution, 
+            add_zero=False)
         self._init_analysis(data_loader)
 
 
@@ -140,11 +142,11 @@ class Analyze3D():
             kz = self.data.data_dict['default'][band]['kz']
             k_rho = self.data.data_dict['default'][band]['k_rho']
             f = self.data.data_dict['default'][band]['frequency']
-            wl, f_cut = self.data.wl_cut(
-                root='default', band='0', wl_range=[0.,1e10])
-            wl, th = self.data.wl_cut(
-                root='default', band='0', wl_range=[0.,1e10],
-                param_key = 'angle')
+            # wl, f_cut = self.data.wl_cut(
+            #     root='default', band='0', wl_range=[0.,1e10])
+            # wl, th = self.data.wl_cut(
+            #     root='default', band='0', wl_range=[0.,1e10],
+            #     param_key = 'angle')
             wl = np.array(wl)
             print(max(th))
             ax.plot(th, wl*1.e9, linestyle='None', marker='o', color='black')
@@ -201,9 +203,9 @@ class Analyze3D():
                 #surf = ax.plot_surface(m_rho, mz, m_rho*3.e8, cmap=cm.bwr,
                 #                       linewidth=0, antialiased=False)
             elif mode == 'scatter':
-                ax.scatter(self.data.data_dict['default']['0']['k_rho'], \
-                    self.data.data_dict['default']['0']['kz'], \
-                        self.data.data_dict['default']['0']['frequency'])
+                ax.scatter(self.data.data_full['default']['0']['k_rho'], \
+                    self.data.data_full['default']['0']['kz'], \
+                    self.data.data_full['default']['0']['frequency'])
                 # ax.scatter(m_rho, mz, mf)
             elif mode == 'eplane':
                 plane = ax.plot_surface(m_rho, mz, mz*0.999*3.e8, \

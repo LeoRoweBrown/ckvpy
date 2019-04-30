@@ -11,7 +11,8 @@ class Bzone2D(CSVLoader):
     
     def __init__(self, datafile, symmetry, 
                  headers=['skip', 'band', 'skip' 'frequency','kx', 'ky', 'kz',
-                 'n', 'skip'], ndim=3, root='default', resolution=100):
+                 'n', 'skip'], ndim=3, root='default', resolution=100, 
+                 interpolation_method='cubic', add_zero = False):
         
         print("Using Bzone2D")
 
@@ -32,7 +33,8 @@ class Bzone2D(CSVLoader):
             (datafile, headers=headers)
         self.reflect()
         self._removerawnans()
-        self.interpolate(resolution)
+        if add_zero: self.addzero()
+        self.interpolate(resolution, method=interpolation_method)
 
     def _convert_to_polar(self, inverse=False):
         for band in self.data[self.root]:
