@@ -166,12 +166,12 @@ class Analyze3D():
 
     def plot_3d(self, mode='surface'):
         """Plot dispersion"""
-        if not self.data.status['reflected']:
-            print("Reflecting")
-            self.reflect()
-        if not self.data.status['interpolated']:
-            print("Interpolating")
-            self.interpolate()
+        # if not self.data.status['reflected']: # from old structure of code
+        #     print("Reflecting")
+        #     self.data.reflect()
+        # if not self.data.status['interpolated']:
+        #     print("Interpolating")
+        #     self.interpolate()
         print("Plotting")
         fig = plt.figure(figsize=(12,9))
 
@@ -180,7 +180,7 @@ class Analyze3D():
             print(self.data.data_full['default'][band].keys())
             mf = self.data.data_full['default'][band]['mf']
             m_rho = self.data.data_full['default'][band]['mi']
-            mz = self.data.data_full['default'][band]['mj']a
+            mz = self.data.data_full['default'][band]['mj']
 
             ax = fig.add_subplot(1,1,1, projection='3d')
             global_max = np.max([np.max(m_rho), np.max(mz)])
@@ -207,9 +207,9 @@ class Analyze3D():
                     self.data.data_full['default']['0']['kz'], \
                     self.data.data_full['default']['0']['frequency'])
                 # ax.scatter(m_rho, mz, mf)
-            elif mode == 'eplane':
-                plane = ax.plot_surface(m_rho, mz, mz*0.999*3.e8, \
-                            cmap=cm.coolwarm, linewidth=0, antialiased=False)
+            # elif mode == 'eplane':
+            #     plane = ax.plot_surface(m_rho, mz, mz*0.999*3.e8, \
+            #                 cmap=cm.coolwarm, linewidth=0, antialiased=False)
                
             #ax.set_zlim([np.min(mf),np.max(mf)])
             fig.savefig("dispersion"+band+".png", bbox_inches='tight')
@@ -218,6 +218,8 @@ class Analyze3D():
 
     def compare_sio2(self, ratio_3d=0.106, index="sio2", \
         filename=None, modelname=None, n_lim=None):
+        """TODO not used, overrridend and deprecated. Remove"""
+        raise NotImplementedError
         if not self.data.status['intersected']:
             print("Cherenkov angle has not been calculated, please use "
                   "calculateCherenkov(v=<speed>, direction=<[rho, z]>")
@@ -236,7 +238,7 @@ class Analyze3D():
                 modelname=modelname, n_lim=[1.035,1.1]
                 )
 
-    def compare_sio2(self, ratio=None, index="sio2", \
+    def compare_sio2(self, ratio=0.106, index="sio2", \
     filename=None, modelname=None, \
     n_lim=None, roots=None, bands=None):
         """Compare expected refractive index/Cherenkov angle from 
