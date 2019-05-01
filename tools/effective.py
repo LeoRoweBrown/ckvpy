@@ -86,21 +86,10 @@ def compare_medium(n_data, th_in, wl_in, ratio, index="sio2", \
     th_in = np.array([th_in[i] for i in ind]) # unused at the moment
     n_sio2_interp = np.interp(wl_in, wl_sio2, n_sio2)
     e_sio2 = n_sio2_interp*n_sio2_interp
-    # volume ratio 2d
-    # volume ratio z direction
-    # eff_2d = e_index(1.0, e_sio2, ratio_2d)  # 2d
-    # n_test = eff_test**0.5
-    # if ratio_3d is None:
-    #     eff = eff_2d
-    # else:
-    #     eff = e_index(1.0, eff_2d, ratio_3d)  # full 3d
-    # n_eff = eff**0.5  # n = sqrt(eps)
-    # n_data = 1./(np.cos(th)*beta)  # Cherenkov formula
-    # n_test = average_index(n_sio2_interp, 1.0, vr=0.106)
+
     n_mg = np.sqrt(maxwell_garnett_index(1.0, e_sio2, ratio))
     n_eff = average_index(n_sio2_interp, 1.0, vr=ratio)
-    # print(wl_in)
-    # th_eff = np.arccos(1./beta*n_eff)
+
     fig = plt.figure(figsize=(10,8))
     ax = fig.add_subplot(111)
     ax.plot(wl_in*1e9, n_eff, label="Effective medium theory "
@@ -132,16 +121,6 @@ def compare_medium(n_data, th_in, wl_in, ratio, index="sio2", \
     ax.set_xlabel(r"Wavelength $\lambda$ (nm)")
     ax.set_ylabel(r"Refractive index $n_{eff}$")
     ax.legend()
-    # ax1 = ax.twinx() # fig.add_subplot(212)
-    # ax1.set_xlim([np.min(wl_in),600])
-    
-    yl = np.arccos(1./(beta*n_lim[0]))
-    yh = np.arccos(1./(beta*n_lim[1]))
-    # ax1.set_ylim([yl, yh])
-    # ax1.set_yticks(np.arange(np.round(yl*2.0, 2)/2.0, \
-    #     yh+0.005, 0.01))
-    # ax1.set_xlabel(r"Wavelength $\lambda$ (nm)")
-    # ax1.set_ylabel(r"Saturated Cherenkov Angle $\theta_c$ (rad)")
     if filename is None:
         fig.savefig("untitled_effective_index"+str(band)+"test.png")
     else:

@@ -15,7 +15,7 @@ from matplotlib import cm
 import ckvpy.tools.effective as effective
 import ckvpy.tools.photon_yield as photon_yield
 from ckvpy.tools.bz2d import Bzone2D
-from ckvpy.tools.analysis import dataAnalysis3D
+from ckvpy.tools.analysis3d import dataAnalysis3D
 
 __all__ = ['Analyze3D']
 
@@ -61,23 +61,23 @@ class Analyze3D():
         # __getitem__(self, key):
         #     return object.__getattribute(self.data, key)
 
-    def plotRange(self):
+    def plot_range(self):
         """Plot effect of wavelength range on chromatic error and angle"""
         for band in self.data.data_dict['default']:
             wl_low_a = []
             mean_a = []
             err_a = []
-            theta = self.data['default'][band]['angle']
+            theta = self.data.data_dict['default'][band]['angle']
             # self.sort_data('wavelength', subkeys=['cherenkov'])
             wl = \
-                np.array(self.data['default'][band]['wavelength'])
+                np.array(self.data.data_dict['default'][band]['wavelength'])
             # print(wl)
             # print(theta)
             for i, wl_low in enumerate(range(250,401,50)):
                 print(wl_low)
                 wl_r = [wl_low*1.e-9, 500.e-9]
                 _, _, mean_t, err_t = \
-                    self._calc_err(theta, wl, wl_r)
+                    self.data.calc_err(wl_range, 'default', band, sign=1)
                 if err_t is None or mean_t is math.nan:
                     continue
                 mean_a.append(mean_t)
@@ -110,7 +110,7 @@ class Analyze3D():
             fig.show()
             plt.close()
 
-    def plotCherenkov(self):
+    def plot_cherenkov(self):
         """Plot Angle against Wavelength and Scatter plot of intersection"""
         if not self.data.status['intersected']:
             print("Cherenkov angle has not been calculated, please use "
@@ -164,7 +164,7 @@ class Analyze3D():
         fig1.show()
         plt.close()
 
-    def plot3d(self, mode='surface'):
+    def plot_3d(self, mode='surface'):
         """Plot dispersion"""
         if not self.data.status['reflected']:
             print("Reflecting")
@@ -180,7 +180,7 @@ class Analyze3D():
             print(self.data.data_full['default'][band].keys())
             mf = self.data.data_full['default'][band]['mf']
             m_rho = self.data.data_full['default'][band]['mi']
-            mz = self.data.data_full['default'][band]['mj']
+            mz = self.data.data_full['default'][band]['mj']a
 
             ax = fig.add_subplot(1,1,1, projection='3d')
             global_max = np.max([np.max(m_rho), np.max(mz)])
@@ -236,45 +236,81 @@ class Analyze3D():
                 modelname=modelname, n_lim=[1.035,1.1]
                 )
 
-    def photon_yield(self, beta=0.999, L=1.e-6, wl_range=[250.e-9, 500.e-9], \
-                    root='default', band='0'):
-        # raise NotImplementedError
-        theta = self.data.data_dict['default'][band]['cherenkov']['angle']
+    def compare_sio2(self, ratio=None, index="sio2", \
+    filename=None, modelname=None, \
+    n_lim=None, roots=None, bands=None):
+        """Compare expected refractive index/Cherenkov angle from 
+        Maxwell-Garnett formula to data from simulation. Analysis is valid
+        INSIDE the crystal, so wavelength derived from k not c/f
+        Params:
+            ratio (float): ratio of dielectric to air
+            index (str): material refractive index in ./index/<index>.txt
+                used to calculate expected index from effective medium.
+            filename (str): prefix for file names of form 
+                filename_a_1e-7_b_0.png
+            modelname (str): modelname used in title of graph 
+            n_lim: n plot range
+            roots (list (str)): root keys to plot for
+            bands (list (str)): bands to plot for
+        """
+        for root in self.data.data_dict:
+            if root not in roots and roots is not None:
+                continue
 
-        f = self.data.data_dict['default'][band]['cherenkov']['frequency']
-        _, theta = self.data.wl_cut(root, band, wl_range=wl_range)
-        _, f = self.data.wl_cut(root, band, wl_range, 'frequency') # TODO: move
-        # print(theta)
-        # print('============')
-        # print(f)
-        n_p = photon_yield.compute(theta=theta, f=f, beta=0.999,
-                                  L=1.e-3, n=None)
-        if 'yield' not in list(self.data.data_dict[root][band]):
-            self.data.data_dict['default'][band]['yield'] = {
-                'range': [],
-                'L': [],
-                'n_photons': []
-            }
-        self.data.data_dict['default'][band]['yield']['range'].append(wl_range)
-        self.data.data_dict['default'][band]['yield']['L'].append(L)
-        self.data.data_dict['default'][band]['yield']['n_photons'].append(n_p)
+            for band in self.data.data_dict[root]:
+                if band not in bands and bands is not None:
+                    continue
 
-    def wl_cut(self, a='default', band='0', 
-              wl_range=[0.,1e10], param_key=None, sign=1):
-        """Take cut of data based on wavelength range. Default behaviour
-        removes negative angles"""
-        wl = self.data.data_dict[a][band]['cherenkov']['wavelength']
-        theta = np.array(self.data.data_dict[a][band]['cherenkov']['angle'])
-        if param_key is not None:
-            # print(self.data.data_dict['default'][band]['cherenkov'])
-            print('cutting for', param_key)
-            param = self.data.data_dict[a][band]['cherenkov'][param_key]
-        else:
-            param = theta
-        wl_nm_range = []
-        param_nm_range = []
-        for i, w in enumerate(wl):
-            if w < wl_range[1] and w > wl_range[0] and sign*theta[i]>0:
-                wl_nm_range.append(w)
-                param_nm_range.append(param[i])
-        return wl_nm_range, param_nm_range
+                if 'n_eff' not in self.data.data_dict[root][band]:
+                    # calculate n inside crystal using data
+                    self.data.calculate_n_eff()  
+                if 'n_mg' not in self.data.data_dict[root][band]:
+                    if ratio is None:
+                        print("Supply volume ratio or run "
+                              "data.calculate_n_mg first")
+                        return
+                    # calculate n using MG theory
+                    self.data.calculate_n_mg(ratio, index)
+
+                wl_in = self.data.data_dict[root][band]['wl_in']
+                th_in = self.data.data_dict[root][band]['th_in']
+                n_data = self.data.data_dict[root][band]['n_eff']
+                ind = np.argsort(wl_in)
+                wl_in = np.array([wl_in[i] for i in ind]) # use data.sort_data() 
+                                                        # instead?
+                th_in = np.array([th_in[i] for i in ind]) # unused at the moment
+
+                n_mg = self.data.data_dict[root][band]['n_mg']
+                fig = plt.figure(figsize=(10,8))
+                ax = fig.add_subplot(111)
+                ax.plot(wl_in*1e9, n_data,
+                    label="Simulation",  linestyle='None', color='black', marker='o',\
+                    markersize=6)
+                ax.plot(wl_in*1e9, n_mg, label="Effective medium theory "
+                    "(Maxwell-Garnett)",
+                    color='black', linestyle='--', marker='None', markersize=6)
+                ax.set_xticks(np.arange(np.min(wl_in)-100, 1000+100, 100))
+                global_max = max([np.max(n_mg), np.max(n_data)])
+                global_min = min([np.min(n_mg), np.min(n_data)])
+
+                if n_lim is None:
+                    n_lim = global_min, global_max
+                ax.set_ylim(n_lim)
+                ax.set_xlim([200,600])  # Malitson SiO2 only valid from 200nm
+
+                title = ("Effective Index Comparison Between Theory and "
+                        "Simulation for \n" + r"($a=$"+root+r"$m$) (Band " + \
+                        str(int(band)+1) + ")")
+                if modelname is not None:
+                    title += " (" + modelname + ")"
+                ax.set_title(title)
+                ax.set_xlabel(r"Wavelength $\lambda$ (nm)")
+                ax.set_ylabel(r"Refractive index $n_{eff}$")
+                ax.legend()
+                if filename is None:
+                    fig.savefig("3d_untitled_effective_index_a_"+\
+                        str(root)+"b_"+str(band)+".png")
+                else:
+                    fig.savefig(filename+"_a_"+\
+                        str(root)+"b_"+str(band)+".png")
+                plt.close()

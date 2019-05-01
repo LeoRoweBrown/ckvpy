@@ -1,7 +1,10 @@
 import numpy as np
 import scipy.constants as const
 import json
+import os
 from matplotlib import pyplot as plt
+import ckvpy.tools.photon_yield as photon_yield
+import ckvpy.tools.effective as effective
 
 class dataAnalysis(object):
     """Class to handle wavelength cuts, sorting, angle finding etc."""
@@ -45,26 +48,23 @@ class dataAnalysis(object):
         with open(name, 'w') as f:
             json.dump(self.data_dict, f)
 
-    def find_angle(self, wl_range=[250.0e-9, 500.0e-9], filename=None,\
-                  band='0'):
+    def find_angle(self, wl_range=[250.0e-9, 500.0e-9], filename=None):
         """Get Cherenkov angles/chromatic error for wavelength range wl_range
         
         Params:
-        filename (str): name of file that 'a', average Cherenkov
-            angle, chromatic error in 250-500nm wavelength range is stored
-        
+            wl_range list[float]: wavelength range that Cherenkov angle and
+                chromatic error is calculated over
         Returns:
             tuple(float): Cherenkov angle average and range
         """
-        band = str(band)
         for a in self.data_dict:
             for band in self.data_dict[a]:
                 print("Finding angle for a =", a, "band", band)
                 wl1, wl2, average, rnge = self.calc_err(wl_range, a=a, band=band)
-                if type(a) is str: 
-                    a_ = 0
-                else:
-                    a_ = a
+                try:
+                    a_ = float(a)
+                except ValueError:
+                    a_ = 0.
                 array = np.array([wl1, wl2, average, rnge, float(a_)])
                 self.data_dict[a][band]['cherenkov'] = array.tolist()  # json friendly
                 # self.data_dict[a][band][str(wl1)+'-']
@@ -127,10 +127,64 @@ class dataAnalysis(object):
                 plt.show()
                 print(wl_in)
                 # print(neff)
+
+    def calculate_n_mg(self, ratio, index="sio2"):
+        for root in self.data_dict:
+            for band in self.data_dict[root]:
+                wl_in = self.data_dict[root][band]['wl_in']
+                index_file = os.path.join(os.path.dirname(__file__),\
+                    "..\\index\\"+ index + ".txt")
+                wl_sio2, n_sio2 = np.loadtxt(index_file).T
+                n_sio2_interp = np.interp(wl_in, wl_sio2, n_sio2)
+                e_sio2 = n_sio2_interp*n_sio2_interp
+                n_mg = np.sqrt(
+                    effective.maxwell_garnett_index(1.0, e_sio2, ratio))
+                self.data_dict[root][band]['n_mg'] = n_mg
     
-    def calcuate_inside(self):
-        """compute wavelength inside crystal, already done by n_eff"""
-        self.calculate_n_eff()
+    def average_n(self, wl_range):
+        """finds average n_mg and n_eff (from data) in given wavelength range
+        """
+        for root in self.data_dict:
+            for band in self.data_dict[root]:
+                n_mg = self.data_dict[root][band]['neff_mg']
+                # find n where wl_range[0] < wavelength < wl_range[1]
+                for r in range(len(wl_range)): # lower and upper range e.g.
+                                               # wl_range = [250e-9, 500.e-9]
+                    i = 0  # ith data value
+                    w = 0. # wavelength
+                    # loop stops once the data point w > wl_range[r]
+                    while w < wl_range[r] and i < len(wl_in):
+                        w = wl_in[i]
+                        if i+1 >= len(wl_in):
+                            print("could not find", wl_range[r])
+                            print("using", wl_in[i])
+                            j = i 
+                        else:
+                            wl1_diff = wl_in[i+1] - wl_range[r]
+                            wl2_diff = wl_range[r] - wl_in[i]
+                            # decide data point by its proximity to
+                            # final j decided on final iteration
+                            if abs(wl1_diff) > abs(wl2_diff):
+                                j = i
+                            else:
+                                j = i+1
+                        i += 1  # next data point
+                    if r == 0:  # for i1:i2 slice
+                        i1 = j
+                    else:
+                        i2 = j+1
+                n_mg_av = np.mean(n_mg[i1:i2])  # average maxwell garnett n
+                n_data_av = np.mean(n_data[i1:i2])  # average n from data
+                n_mg_err = np.std(n_mg[i1:i2])/(i2-i1)**0.5  # standard error
+                n_data_err = np.std(n_data[i1:i2])/(i2-i1)**0.5
+                self.data.data_dict[a][band]['n_data_mean'] = \
+                    [n_data_av, n_data_err]
+                self.data.data_dict[a][band]['n_mg_mean'] = \
+                    [n_mg_av, n_mg_err]
+                print('a:', a, 'band:', band, 'n_data', n_data_av, '+-', \
+                    n_data_err)
+                print('a:', a, 'band:', band, 'n_mg', n_mg_av, '+-', \
+                    n_mg_err)
 
     def calc_err(self, wl_range, a='default', band='0', sign=1):
         """Find chromatic error and remove negative/positive angles between
@@ -205,10 +259,10 @@ class dataAnalysis(object):
         elif wl[i] < wavelength: 
             # wl[i] should be the value larger than desired wavelength
             print("Wavelength too large! Changing", wavelength, "to", wl[i])
-            raise Warning("Dataset doesn't seem to match desired wavelength "
-                        "range, expect strange results (it is likely that "
-                        "the angles found will not be anywhere near the "
-                        "vertical line")
+            print("Dataset doesn't seem to match desired wavelength "
+                  "range, expect strange results (it is likely that "
+                  "the angles found will not be anywhere near the "
+                  "vertical line")
             wavelength = wl[i]
 
         if (wl[i]-wl[i-1]) < 1.e-15*(th[i]-th[i-1]): # avoid division by zero
@@ -247,7 +301,7 @@ class dataAnalysis(object):
                 # print(theta[i], param[i])
                 # print(len(wl), len(self.data_dict[root][band][key]))
                 if w < wl_range[1] and w > wl_range[0] and sign*theta[i]>0:
-                    print("wavelength", w, w>wl_range[1])
+                    # print("wavelength", w, w>wl_range[1])
                     if n == 0: wl_nm_range.append(w)
                     param = self.data_dict[root][band][key][i]
                     param_nm_range.append(param)
@@ -281,7 +335,7 @@ class dataAnalysis(object):
                     print(param, len(param_data))
                 self.data_dict[root][band]['wavelength'] = wl_data
 
-    def save_table(self, filename):
+    def save_cherenkov(self, filename):
         """Save Cherenkov analysis data into a table"""
         matrix = np.empty((0,5))
         for a in self.data_dict:
@@ -291,32 +345,35 @@ class dataAnalysis(object):
         print(matrix)
         np.savetxt(filename, matrix)
 
-    def photon_yield(self, beta=0.999, L=100.e-6, wl_range=[250.e-9, 500.e-9], \
-                    root='default', band='0'):
-            # raise NotImplementedError
-        if root == 'default':
-            root = list(self.data_dict)[0]
-        theta = self.data_dict[root][band]['angle']
-        f = self.data_dict[root][band]['frequency']
-        wl, theta = self.wl_cut(root, band, wl_range)
-        wl, f = self.wl_cut(root, band, wl_range, 'frequency')
-        n_p = photon_yield.compute(theta=theta, f=f, beta=0.999,
-                                L=L, n=None)
-        if 'yield' not in list(self.data_dict[root][band]):
-            self.data_dict[root][band]['yield'] = {
-                'range': [],
-                'L': [],
-                'n_photons': []
-            }
-        self.data_dict[root][band]['yield']['range'].append(wl_range)
-        self.data_dict[root][band]['yield']['L'].append(L)
-        self.data_dict[root][band]['yield']['n_photons'].append(n_p)
+    def calculate_yield(
+        self, beta=0.999, L=100.e-6, wl_range=[250.e-9, 500.e-9]):
+        """Compute photon yield using Frank-Tamm theory and effective 
+        index. TODO: Currently uses outside angle to find n, rather
+        than the correct n which is n_eff."""
+        # raise NotImplementedError
+        for root in self.data_dict:
+            for band in self.data_dict[root]:
+                theta = self.data_dict[root][band]['angle']
+                f = self.data_dict[root][band]['frequency']
+                wl, theta = self.wl_cut(root, band, wl_range)
+                wl, f = self.wl_cut(root, band, wl_range, 'frequency')
+                n = self.data_dict[root][band]['n_eff']
+                n_p = photon_yield.compute(theta=theta, f=f, beta=0.999,
+                                        L=L, n=n)
+                if 'yield' not in list(self.data_dict[root][band]):
+                    self.data_dict[root][band]['yield'] = {
+                        'range': [],
+                        'L': [],
+                        'n_photons': []
+                    }
+                self.data_dict[root][band]['yield']['range'].append(wl_range)
+                self.data_dict[root][band]['yield']['L'].append(L)
+                self.data_dict[root][band]['yield']['n_photons'].append(n_p)
     
     def sort_data(self, key, subkeys=None, direction=1):
         """sort ascending according to key, e.g. key = 'wavelength'
         Subkeys allow for sorting nested data"""
         for root in self.data_dict:
-            num_bands = self.num_bands[root]
             for band in self.data_dict[root]:
                 data = self.data_dict  # reset data to entire dict
                 if subkeys is None:
@@ -340,202 +397,3 @@ class dataAnalysis(object):
                             # print("sorting", param)
                             data[param] = \
                             [data[param][ind] for ind in sort_index]
-
-# ============================================================================
-
-class dataAnalysis3D(dataAnalysis):
-    """Data analysis class for 3D models, requires intersection of electron
-    plane and dispersion to find cherenkov angle etc."""
-    def __init__(self, data):
-        self.data_full = data  # includes full Brillouin zone data
-        self.data_dict = {}  # same structure as in 2D case
-        self._init_data_dict(data)
-        self._get_num_bands()
-        self.status = {
-            'reflected': True,
-            'interpolated': True,
-            'intersected': False
-        }
-    
-    def _init_data_dict(self, data):
-        self.data_dict = {}
-        for root in self.data_full:
-            self.data_dict[root] = {}
-            for band in self.data_full[root]:
-                self.data_dict[root][band] = {}
-
-    def calculateCherenkov(self, beta=0.999, direction = [1,0],
-                          wl_range=[250.e-9,500.e-9]):
-        """Find intersection of electron plane and dispersion to get
-        Cherenkov behaviour
-        Args:
-            beta (float): electron speed ratio with c
-            direction (list): determines direction of electron with idices
-                rho (|x,y|) and z which defines e-plane omega = k.v
-            wl_range list[int/float, int/float]: range of wavelength in nm
-                to analyse Cherenkov angle and chromatic error over
-        """
-        if type(direction[0]) is not int or type(direction[1]) is not int:
-            raise ValueError("Only directions purely in z or rho supported")
-        for band in self.data_full['default']:
-            m_rho = self.data_full['default'][band]['mi']  # matrix of k_rho values
-            mz = np.copy(self.data_full['default'][band]['mz'])  # mutated so copy
-            my = self.data_full['default'][band]['my']  # matrix of ky values
-            mx = self.data_full['default'][band]['mx']  # matrix of kx values
-            mf = np.copy(self.data_full['default'][band]['mf'])  # mutated so copy
-
-            z_array = mz.T[0][-1:1:-1]  # starts at maximum
-            rho_array = m_rho[0][1:-1]  # cut off edges (interp)
-
-            # e_plane = self.data_dict['default'][band]['mj']*3.e8*v
-            mf *= 2*np.pi  # omega=2pif
-            mf = mf.T # since we transpose z to get z array from columns
-            self.data_dict['default'][band] = \
-                {'kz': [None], 'k_rho': [None], 'frequency': [None], 'direction': direction}
-
-            kz_c = np.array([])  # empty temp arrays to store crossing points
-            k_rho_c = np.array([])
-            f_c = np.array([])
-            for kz_i, kz in enumerate(z_array[:-1]):  # ith value of kz
-                for k_rho_i, k_rho in enumerate(rho_array[:-1]):  # jth k_rho
-                    kz2 = z_array[kz_i + 1]  # i+1th value of kz
-                    k_rho2 = rho_array[k_rho_i + 1]  # j+1th k_rho
-                    f = mf[kz_i, k_rho_i]  # f(kz,k_rho)
-                    fz2 = mf[kz_i + 1, k_rho_i]  # f(kz2,k_rho)
-                    f_rho2 = mf[kz_i, k_rho_i + 1]  # f(kz,k_rho2)
-                    # get crossing points and booleans (was crossing found?)
-                    rho_found, rho_cross, z_found, z_cross = \
-                        self._cross(beta, kz, kz2, k_rho, k_rho2, f, fz2,
-                                    f_rho2, direction)
-                    k_rho_cross, f_rho_cross = rho_cross
-                    kz_cross, fz_cross = z_cross
-                    if z_found:  # crossing found in kz direction
-                        kz_c = np.append(kz_c, kz_cross)
-                        k_rho_c = np.append(k_rho_c, k_rho)
-                        f_c = np.append(f_c, fz_cross)
-                    if rho_found:  # crossing found in k_rho direction
-                        kz_c = np.append(kz_c, kz)
-                        k_rho_c = np.append(k_rho_c, k_rho_cross)
-                        f_c = np.append(f_c, f_rho_cross)
-            self.data_dict['default'][band]['kz'] = kz_c.tolist()
-            self.data_dict['default'][band]['k_rho'] = k_rho_c.tolist()
-            # set back to f instead of omega
-            self.data_dict['default'][band]['frequency'] = \
-                (f_c/(2*np.pi)).tolist()
-            if len(self.data_dict['default'][band]['kz']) == 0:
-                raise Warning("No intersection found between electron plane "
-                            "and dispersion plane,")
-        self.status['intersected'] = True
-        # self._rm_nan()  # remove NaNs # needs fixing for 3D case (add bands key)
-        self._comp_angle()
-
-    def _cross(self, beta, kz, kz2, k_rho, k_rho2, f, fz2,
-               f_rho2, direction):
-        """Find crossings between electron plane in omega=v_z*kz+v_rho*k_rho
-        and dispersion to find Cherenkov modes Interpolates between kz, kz2
-        and k_rho, k_rho2 separately to find them.
-        
-        Args: 
-            beta (float): speed as percentage of c
-            direction (list): from 0 to 1, component in rho and z direciton 
-                respectively in form [float, float] ([1,1] -> velocity=(v,v))
-            kz, kz2, k_rho, k_rho2 (float): ith and i+1th value of kz/k_rho
-                in ascending order
-            f (float): value of frequency at kz k_rho
-            fz2, f_rho2 (float): value of frequency at (k_rho,kz2) and 
-                (k_rho2,kz)
-
-        Returns:
-            z_found, rho_found (bool): True if crossing found looking in the 
-                kz/k_rho direction
-            (kz_cross, fz_cross) tuple(float): kz and fz where crossing found
-            (k_rho_cross, f_rho_cross) tuple(float) same for k_rho and f_rho
-        """
-
-        # first look along kz:
-        ve = beta*const.c  # speed of light
-        m_z = (fz2-f)/(kz2-kz)  # gradient in kz direction
-        m_rho = (f_rho2-f)/(k_rho2-k_rho)  # gradient in k_rho direction
-        # electron speed components
-        v_rho, v_z = ve*direction[0], ve*direction[1]  
-        v_abs = (v_rho**2 + v_z**2)**0.5
-
-        cz = f - m_z*kz  # f intercept constant in f=m*k+c
-        c_rho = f - m_rho*k_rho
-        # first look at kz direction
-        if abs(m_z - v_z) < 1e-15*abs(v_rho*k_rho - cz):
-            z_found = False  # m -> +-infinity
-            kz_cross = fz_cross = None
-        else:
-            kz_cross = (v_rho*k_rho - cz)/(m_z - v_z)
-            fz_cross = kz_cross*m_z + cz
-            z_found = True
-        z = (kz_cross, fz_cross)
-
-        if abs(m_rho - v_rho) < 1e-20*abs(v_z*kz - c_rho):
-            rho_found = False  # m -> +-infinity
-            k_rho_cross, f_rho_cross = None, None
-        else:
-            k_rho_cross = (v_z*kz - c_rho)/(m_rho - v_rho)
-            f_rho_cross = k_rho_cross*m_rho + c_rho
-            rho_found = True
-        rho = (k_rho_cross, f_rho_cross)
-
-        if rho_found:  # check if in range that interpolation is valid
-            k_bounds = k_rho_cross >= min(k_rho,k_rho2) and \
-                k_rho_cross <= max(k_rho,k_rho2)
-            f_bounds = f_rho_cross >= min(f,f_rho2) and \
-                f_rho_cross <= max(f,f_rho2) and f_rho_cross > 0.
-
-            if k_bounds and f_bounds : 
-                rho_found = True
-            else:
-                rho_found = False
-
-        if z_found:
-            k_bounds = kz_cross >= min(kz,kz2) and \
-                kz_cross <= max(kz,kz2)
-            f_bounds = fz_cross >= min(f,fz2) and \
-                fz_cross <= max(f,fz2) and fz_cross > 0.
-            if k_bounds and f_bounds:
-                z_found = True
-            else:
-                z_found = False
-        
-        return rho_found, rho, z_found, z
-
-    def _comp_angle(self):
-        """Find angles *outside* crystal using k-vectors."""
-        # everything else hard-codes 'default', might change
-        for root in self.data_dict:
-            for band in self.data_dict[root]:
-                kz = np.array(self.data_dict[root][band]['kz'])
-                k_rho = np.array(self.data_dict[root][band]['k_rho'])
-                f = np.array(self.data_dict[root][band]['frequency'])
-                d_rho, dz = self.data_dict[root][band]['direction']
-                # adj_for_e_diretion = np.arctan(dz/(d_rho+1e-20))
-                # theta = np.arctan(kz/(k_rho+1e-20)) - adj_for_e_diretion
-                k0 = np.sqrt(kz*kz + k_rho*k_rho)
-                # dz = 1, k_rho cons
-                if dz == 1: k_parallel = k_rho
-                elif d_rho == 1: k_parallel = kz
-                # print(k_parallel)
-                # print(k_rho)
-                theta = np.arcsin(k_parallel/k0)
-                 #print(theta)
-                wl = const.c/np.array(f)
-                # fig = plt.figure()
-                # ax = fig.add_subplot(111, projection='3d')
-                # ax.scatter(k_rho, kz, f, color='black')
-                # plt.show()
-
-                self.data_dict[root][band]['wavelength'] = wl.tolist()
-                self.data_dict[root][band]['angle'] = theta.tolist()
-                self.wl_cut(root, band, wl_range=[0.,1000e-9],\
-                    sign=1, param_key='all', mutate=True)
-                self.calculate_n_eff()
-                # print(print(wl)
-                # print(f)
-                # wl_interp1, wl_interp2, mean, err = \
-                #     self.calc_err(wl_range)
-        

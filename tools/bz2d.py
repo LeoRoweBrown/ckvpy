@@ -237,12 +237,14 @@ class Bzone2D(CSVLoader):
             self.data[self.root][band]['mj'] = mj
         self.status['interpolated'] = True
 
-    def addzero(self, band):
+    def addzero(self):
         """Add point f(k=0) = 0 to help interpolation"""
-        self.data[self.root][band]['frequency'].append(0.0)
-        self.data[self.root][band]['kx'].append(0.0)
-        self.data[self.root][band]['ky'].append(0.0)
-        self.data[self.root][band]['kz'].append(0.0)
+        print("adding zero")
+        for band in  self.data[self.root]:
+            self.data[self.root][band]['frequency'].append(0.0)
+            self.data[self.root][band]['kx'].append(0.0)
+            self.data[self.root][band]['ky'].append(0.0)
+            self.data[self.root][band]['kz'].append(0.0)
 
     def _removerawnans(self):
         """Attempt to fix interpolation with missing data by
