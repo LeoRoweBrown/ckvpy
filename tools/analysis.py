@@ -88,7 +88,6 @@ class dataAnalysis(object):
                     kabs = np.sqrt(kx*kx+ky*ky+kz*kz)
                     th_in = np.arctan(kz/np.sqrt(kx*kx+ky*ky))
                 elif 'kz' in data and 'k_rho' in data:  # 3D
-                    print("n_eff for 3D")
                     kz = np.array(data['kz'])
                     k_rho = np.array(data['k_rho'])
                     kabs = np.sqrt(k_rho*k_rho+kz*kz)
@@ -115,18 +114,6 @@ class dataAnalysis(object):
                 data['n_eff'] = neff[nan_mask].tolist()
                 data['wl_in'] = wl_in[nan_mask].tolist()
                 data['th_in'] = th_in[nan_mask].tolist()
-                fig = plt.figure()
-                ax = fig.add_subplot(111, projection='3d')
-                ax.scatter(k_rho, kz, f, color='black')
-                plt.show()
-                plt.plot(data['th_in'], data['wl_in'],  marker='o', linestyle='None')
-                plt.show()
-                plt.plot(data['wl_in'], data['n_eff'], marker='o', linestyle='None')
-                plt.show()
-                plt.plot(data['angle'], data['wavelength'], marker='o', linestyle='None')
-                plt.show()
-                print(wl_in)
-                # print(neff)
 
     def calculate_n_mg(self, ratio, index="sio2"):
         for root in self.data_dict:
@@ -143,10 +130,10 @@ class dataAnalysis(object):
     
     def average_n(self, wl_range):
         """finds average n_mg and n_eff (from data) in given wavelength range
-        """
+        TODO: test"""
         for root in self.data_dict:
             for band in self.data_dict[root]:
-                n_mg = self.data_dict[root][band]['neff_mg']
+                n_mg = self.data_dict[root][band]['n_mg']
                 # find n where wl_range[0] < wavelength < wl_range[1]
                 for r in range(len(wl_range)): # lower and upper range e.g.
                                                # wl_range = [250e-9, 500.e-9]

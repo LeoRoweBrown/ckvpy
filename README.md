@@ -192,6 +192,8 @@ Parameters:
 * mode (str): Type of plot - default is `'surface'` which gives the regular interpolated 3D dispersion relationship, whereas `'scatter'` shows the raw
 data points projected in 3D.
 
+---
+
 ```
 compare_sio2(
     self, ratio=0.106, index="sio2", filename=None, modelname=None,

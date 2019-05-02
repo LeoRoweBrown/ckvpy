@@ -152,7 +152,7 @@ class Analyze2D():
 
     def compare_sio2(self, ratio=None, index="sio2", \
     filename=None, modelname=None, \
-    n_lim=None, beta=0.999, roots=None, bands=None):
+    n_lim=None, beta=0.999, roots=[None], bands=[None]):
         """Compare expected refractive index/Cherenkov angle from 
         Maxwell-Garnett formula to data from simulation. Analysis is valid
         INSIDE the crystal, so wavelength derived from k not c/f
@@ -168,11 +168,11 @@ class Analyze2D():
             bands (list (str)): bands to plot for"""
             
         for root in self.data.data_dict:
-            if root not in roots and roots is not None:
+            if root not in roots and roots[0] is not None:
                 continue
 
             for band in self.data.data_dict[root]:
-                if band not in bands and bands is not None:
+                if band not in bands and bands[0] is not None:
                     continue
 
                 if 'n_eff' not in self.data.data_dict[root][band]:
@@ -186,14 +186,15 @@ class Analyze2D():
                     # calculate n using MG theory
                     self.data.calculate_n_mg(ratio, index)
 
-                wl_in = self.data.data_dict[root][band]['wl_in']
-                th_in = self.data.data_dict[root][band]['th_in']
-                n_data = self.data.data_dict[root][band]['n_eff']
-                ind = np.argsort(wl_in)
-                wl_in = np.array([wl_in[i] for i in ind]) # use data.sort_data() 
-                                                        # instead?
-                th_in = np.array([th_in[i] for i in ind]) # unused at the moment
+                self.data.sort_data('wavelength')  # not needed?
 
+                wl_in = np.array(self.data.data_dict[root][band]['wl_in'])
+                th_in = np.array(self.data.data_dict[root][band]['th_in'])
+                n_data = np.array(self.data.data_dict[root][band]['n_eff'])
+                # ind = np.argsort(wl_in)
+                # wl_in = np.array([wl_in[i] for i in ind]) # use data.sort_data() 
+                                                        # instead?
+                # th_in = np.array([th_in[i] for i in ind]) # unused at the moment
                 n_mg = self.data.data_dict[root][band]['n_mg']
                 fig = plt.figure(figsize=(10,8))
                 ax = fig.add_subplot(111)

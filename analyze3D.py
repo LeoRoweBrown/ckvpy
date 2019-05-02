@@ -127,10 +127,12 @@ class Analyze3D():
         ax.set_xlabel(r" Cherenkov Angle $\theta_c$ (rad)")
         ax.set_ylabel(r"Wavelength $\lambda$ (m)")
         ax.set_ylim([0,600])  # wavelength range
-        ax.set_title("Wavelength against Cherenkov Angle (+ve) \n Derived from 2D Dispersion")
+        ax.set_title("Wavelength against Cherenkov Angle (+ve) \n"
+                     "Derived from 2D Dispersion")
 
         ax1 = fig1.add_subplot(1,1,1, projection='3d')
-        ax1.set_title("Intersection Points Between Electron Plane \n and 2D Dispersion")
+        ax1.set_title("Intersection Points Between Electron Plane \n"
+                      "and 2D Dispersion (+ve)")
         ax1.set_xlabel(k_rho_axis)
         ax1.set_ylabel(kz_axis)
         ax1.set_zlabel(r"Frequency (Hz)")
@@ -164,7 +166,7 @@ class Analyze3D():
         fig1.show()
         plt.close()
 
-    def plot_3d(self, mode='surface'):
+    def plot_3d(self, filename=None, mode='surface'):
         """Plot dispersion"""
         # if not self.data.status['reflected']: # from old structure of code
         #     print("Reflecting")
@@ -200,19 +202,24 @@ class Analyze3D():
             if mode == 'surface':
                 surf = ax.plot_surface(m_rho, mz, mf, cmap=cm.bwr,
                                        linewidth=0, antialiased=False)
+                if filename is None:
+                    filename = 'dispersion'
                 #surf = ax.plot_surface(m_rho, mz, m_rho*3.e8, cmap=cm.bwr,
                 #                       linewidth=0, antialiased=False)
             elif mode == 'scatter':
                 ax.scatter(self.data.data_full['default']['0']['k_rho'], \
                     self.data.data_full['default']['0']['kz'], \
                     self.data.data_full['default']['0']['frequency'])
+                if filename is None:
+                    filename = 'scatter'
                 # ax.scatter(m_rho, mz, mf)
             # elif mode == 'eplane':
             #     plane = ax.plot_surface(m_rho, mz, mz*0.999*3.e8, \
             #                 cmap=cm.coolwarm, linewidth=0, antialiased=False)
                
             #ax.set_zlim([np.min(mf),np.max(mf)])
-            fig.savefig("dispersion"+band+".png", bbox_inches='tight')
+
+            fig.savefig(filename + "_b_" + band + ".png", bbox_inches='tight')
             plt.show()
             plt.close()
 
@@ -240,7 +247,7 @@ class Analyze3D():
 
     def compare_sio2(self, ratio=0.106, index="sio2", \
     filename=None, modelname=None, \
-    n_lim=None, roots=None, bands=None):
+    n_lim=None, roots=[None], bands=[None]):
         """Compare expected refractive index/Cherenkov angle from 
         Maxwell-Garnett formula to data from simulation. Analysis is valid
         INSIDE the crystal, so wavelength derived from k not c/f
@@ -256,13 +263,13 @@ class Analyze3D():
             bands (list (str)): bands to plot for
         """
         for root in self.data.data_dict:
-            if root not in roots and roots is not None:
+            if root not in roots and roots[0] is not None:
                 continue
 
             for band in self.data.data_dict[root]:
-                if band not in bands and bands is not None:
+                if band not in bands and bands[0] is not None:
                     continue
-
+                print('root', root, ', band', band)
                 if 'n_eff' not in self.data.data_dict[root][band]:
                     # calculate n inside crystal using data
                     self.data.calculate_n_eff()  
@@ -274,14 +281,14 @@ class Analyze3D():
                     # calculate n using MG theory
                     self.data.calculate_n_mg(ratio, index)
 
-                wl_in = self.data.data_dict[root][band]['wl_in']
-                th_in = self.data.data_dict[root][band]['th_in']
-                n_data = self.data.data_dict[root][band]['n_eff']
-                ind = np.argsort(wl_in)
-                wl_in = np.array([wl_in[i] for i in ind]) # use data.sort_data() 
+                self.data.sort_data('wavelength')  # not needed?
+                wl_in = np.array(self.data.data_dict[root][band]['wl_in'])
+                th_in = np.array(self.data.data_dict[root][band]['th_in'])
+                n_data = np.array(self.data.data_dict[root][band]['n_eff'])
+                # ind = np.argsort(wl_in)
+                # wl_in = np.array([wl_in[i] for i in ind]) # use data.sort_data() 
                                                         # instead?
-                th_in = np.array([th_in[i] for i in ind]) # unused at the moment
-
+                # th_in = np.array([th_in[i] for i in ind]) # unused at the moment
                 n_mg = self.data.data_dict[root][band]['n_mg']
                 fig = plt.figure(figsize=(10,8))
                 ax = fig.add_subplot(111)
@@ -301,7 +308,7 @@ class Analyze3D():
                 ax.set_xlim([200,600])  # Malitson SiO2 only valid from 200nm
 
                 title = ("Effective Index Comparison Between Theory and "
-                        "Simulation for \n" + r"($a=$"+root+r"$m$) (Band " + \
+                        "Simulation for \n" + "(Band " + \
                         str(int(band)+1) + ")")
                 if modelname is not None:
                     title += " (" + modelname + ")"
