@@ -3,6 +3,7 @@ import scipy
 import cmath
 import csv
 import json
+import matplotlib
 from matplotlib import pyplot as plt
 import itertools
 from ckvpy.tools.csvloader import CSVLoader
@@ -14,7 +15,10 @@ __all__ = ['Analyze2D']
 
 class Analyze2D():
     """For plotting analysed data for case of 2D model, most actual analysis
-    takes place in analysis.py which contains data analysis classes"""
+    takes place in analysis.py which contains data analysis classes
+    TODO: maybe make generalised Analyze class with things like 
+    plot_dispersion and plot_cherenkov and inherit from it."""
+
     def __init__(self, datafile, file_suffix = 'undefined', \
         headers = ['a', 'band', 'k', 'frequency', 'wavelength', 'angle',
         'kx', 'ky', 'kz'], sort_by = 'a', beta=0.999):
@@ -36,6 +40,8 @@ class Analyze2D():
         plt.rcParams["font.family"] = "serif"
         plt.rcParams["mathtext.fontset"] = "dejavuserif"
         plt.rcParams['font.size'] = 14
+        # matplotlib.rc('text', usetex=True)
+        # matplotlib.rcParams['text.latex.preamble']=[r"\usepackage{amsmath}"]
 
         data_loader = CSVLoader(datafile=datafile, file_suffix=file_suffix, 
             headers=headers, sort_by=sort_by)
@@ -146,6 +152,35 @@ class Analyze2D():
         if filename is not None:
             print("Saving as", filename)
             fig.savefig(filename, bbox_inches='tight')
+            plt.close()
+        else:
+            plt.show()
+
+    def plot_dispersion(self, filename=None, modelname=None, a_i = None):
+        """plot f against |k|"""
+        for a in self.data.data_dict:
+            if a_i is not None:
+                if a != list(self.data.data_dict)[a_i]:
+                    print('Skipping', a)
+                    continue
+            fig = plt.figure(figsize=(10,8))
+            ax = fig.add_subplot(111)
+            for band in self.data.data_dict[a]:
+                f = self.data.data_dict[a][band]['frequency']
+                kx = np.array(self.data.data_dict[a][band]['kx'])
+                kz = np.array(self.data.data_dict[a][band]['ky'])
+                ky = np.array(self.data.data_dict[a][band]['kz'])
+                k = np.sqrt(kx*kx + ky*ky + kz*kz)
+                ax.plot(k, f, color='black', marker='o', markersize=5)
+
+                if modelname is None: modelname = self.path
+                title = "Dispersion of Effective-medium Photonic Crystal\n"\
+                    + r"$a=$" + a +" (" + modelname + ")"
+                ax.set_title(title)
+                ax.set_xlabel(r"Magnitude of wavevector $k$ ($m^{-1}$)")
+                ax.set_ylabel(r"Angular Frequency $\omega$ ($s^-1$)")
+        if filename is not None:
+            fig.savefig(filename+'a_i-'+str(a_i)+'.png')
             plt.close()
         else:
             plt.show()
