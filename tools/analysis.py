@@ -8,8 +8,9 @@ import ckvpy.tools.effective as effective
 
 class dataAnalysis(object):
     """Class to handle wavelength cuts, sorting, angle finding etc."""
-    def __init__(self, data):
+    def __init__(self, data, path):
         self.data_dict = data
+        self.path = path
         self._get_num_bands()
         self._rm_nan()
     
@@ -265,7 +266,12 @@ class dataAnalysis(object):
     def wl_cut(self, root='default', band='0', wl_range=(0.,1e10),\
                sign=1, param_key=None, mutate=False):
         """Take cut of data based on wavelength range. Default behaviour
-        removes negative angles"""
+        removes negative angles if sign=1 or positive if sign=-1
+        param_key: Keys other than wavelength to cut for:
+            'all', None (angle), and any other paramter
+        mutate: updates dicitonary with these values. Only valid when
+            param_key is 'all'.
+        """
         wl_nm_range = []
         param_nm_range = []
         list_param_nm_range = []
@@ -289,10 +295,12 @@ class dataAnalysis(object):
                 # print(len(wl), len(self.data_dict[root][band][key]))
                 if w < wl_range[1] and w > wl_range[0] and sign*theta[i]>0:
                     # print("wavelength", w, w>wl_range[1])
+                    print(w)
                     if n == 0: wl_nm_range.append(w)
                     param = self.data_dict[root][band][key][i]
                     param_nm_range.append(param)
             if mutate:
+                print("Cutting dictionary values")
                 self.data_dict[root][band][key] = param_nm_range
                 print(key)
                 print(np.mean(param_nm_range))

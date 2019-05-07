@@ -51,7 +51,7 @@ class Analyze2D():
     
     def _init_analysis(self, data_loader):
         """Pass data dictionary to dataAnalysis object"""
-        self.data = dataAnalysis(data_loader.data)
+        self.data = dataAnalysis(data_loader.data, path=data_loader.path)
         # TODO: now replace every self.calc_err 
         # with data.calc_err etc. 
     
@@ -156,7 +156,8 @@ class Analyze2D():
         else:
             plt.show()
 
-    def plot_dispersion(self, filename=None, modelname=None, a_i = None):
+    def plot_dispersion(self, filename=None, modelname=None, a_i = None, 
+        f_range=[None]):
         """plot f against |k|"""
         for a in self.data.data_dict:
             if a_i is not None:
@@ -165,20 +166,25 @@ class Analyze2D():
                     continue
             fig = plt.figure(figsize=(10,8))
             ax = fig.add_subplot(111)
+            if f_range[0] is not None:
+                ax.set_ylim(f_range)
             for band in self.data.data_dict[a]:
                 f = self.data.data_dict[a][band]['frequency']
                 kx = np.array(self.data.data_dict[a][band]['kx'])
                 kz = np.array(self.data.data_dict[a][band]['ky'])
                 ky = np.array(self.data.data_dict[a][band]['kz'])
+                wl = np.array(self.data.data_dict[a][band]['wavelength'])
                 k = np.sqrt(kx*kx + ky*ky + kz*kz)
-                ax.plot(k, f, color='black', marker='o', markersize=5)
+                ax.plot(k, f, color='black', marker='o', markersize=5,
+                        linestyle=next(self.mpl_lines), label='Band '+band)
 
-                if modelname is None: modelname = self.path
+                if modelname is None: modelname = self.data.path
                 title = "Dispersion of Effective-medium Photonic Crystal\n"\
                     + r"$a=$" + a +" (" + modelname + ")"
-                ax.set_title(title)
-                ax.set_xlabel(r"Magnitude of wavevector $k$ ($m^{-1}$)")
-                ax.set_ylabel(r"Angular Frequency $\omega$ ($s^-1$)")
+            ax.set_title(title)
+            ax.set_xlabel(r"Magnitude of wavevector $k$ ($m^{-1}$)")
+            ax.set_ylabel(r"Angular Frequency $\omega$ ($s^-1$)")
+            ax.legend()
         if filename is not None:
             fig.savefig(filename+'a_i-'+str(a_i)+'.png')
             plt.close()
@@ -247,12 +253,11 @@ class Analyze2D():
                     n_lim = global_min, global_max
                 ax.set_ylim(n_lim)
                 ax.set_xlim([200,1000])  # Malitson SiO2 only valid from 200nm
-
+                if modelname is None: modelname = self.data.path
                 title = ("Effective Index Comparison Between Theory and "
-                        "Simulation for \n" + r"($a=$"+root+r"$m$) (Band " + \
+                        "Simulation \n for " + modelname + \
+                        r" ($a=$"+root+r"$m$) (Band " + \
                         str(int(band)+1) + ")")
-                if modelname is not None:
-                    title += " (" + modelname + ")"
                 ax.set_title(title)
                 ax.set_xlabel(r"Wavelength $\lambda$ (nm)")
                 ax.set_ylabel(r"Refractive index $n_{eff}$")

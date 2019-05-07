@@ -55,7 +55,7 @@ class Analyze3D():
     def _init_analysis(self, data_loader):
         """Pass data dictionary to dataAnalysis object, access raw data with
         self.data.data_dict[keys]"""
-        self.data = dataAnalysis3D(data_loader.data) 
+        self.data = dataAnalysis3D(data_loader.data, path=data_loader.path)
         # TODO: now replace every self.calc_err 
         # with data.calc_err etc. and self.data=>self.data.data_dict (avoid this?):
         # __getitem__(self, key):
@@ -127,12 +127,12 @@ class Analyze3D():
         ax.set_xlabel(r" Cherenkov Angle $\theta_c$ (rad)")
         ax.set_ylabel(r"Wavelength $\lambda$ (m)")
         ax.set_ylim([0,600])  # wavelength range
-        ax.set_title("Wavelength against Cherenkov Angle (+ve) \n"
-                     "Derived from 2D Dispersion")
+        ax.set_title("Wavelength against (+ve) Cherenkov Angle  \n"
+                     "Derived from 3D Photonic Crystal Dispersion")
 
         ax1 = fig1.add_subplot(1,1,1, projection='3d')
         ax1.set_title("Intersection Points Between Electron Plane \n"
-                      "and 2D Dispersion (+ve)")
+                      "and 3D Photonic Crystal Dispersion")
         ax1.set_xlabel(k_rho_axis)
         ax1.set_ylabel(kz_axis)
         ax1.set_zlabel(r"Frequency (Hz)")
@@ -151,7 +151,7 @@ class Analyze3D():
             #     param_key = 'angle')
             wl = np.array(wl)
             print(max(th))
-            ax.plot(th, wl*1.e9, linestyle='None', marker='o', color='black')
+            ax.plot(th, wl*1.e9, marker='o', color='black')
             ax.set_xticks(np.arange(0,0.4+0.004, 0.05))  # angle
             ax.set_xlim([0, 0.4+0.05])
             global_max = max([np.max(kz), np.max(k_rho)])
@@ -223,31 +223,37 @@ class Analyze3D():
             plt.show()
             plt.close()
 
-    def compare_sio2(self, ratio_3d=0.106, index="sio2", \
-        filename=None, modelname=None, n_lim=None):
-        """TODO not used, overrridend and deprecated. Remove"""
-        raise NotImplementedError
-        if not self.data.status['intersected']:
-            print("Cherenkov angle has not been calculated, please use "
-                  "calculateCherenkov(v=<speed>, direction=<[rho, z]>")
-            return
-        #    ratio_2d = (np.pi*(0.45*(3**0.5))**2)/(3*3**0.5/2)
-        # volume ratio z direction
-        # if ratio_3d is None:
-        #     ratio_3d = 100./250.
-        for band in self.data.data_dict['default']:
-            n_data = self.data.data_dict['default'][band]['n_eff']
-            wl_in = self.data.data_dict['default'][band]['wl_in']
-            th_in = self.data.data_dict['default'][band]['th_in']
-            effective.compare_medium(
-                n_data, th_in, wl_in, ratio_3d, 
-                index=index, band=band, filename=filename, 
-                modelname=modelname, n_lim=[1.035,1.1]
-                )
+    def plot_dispersion(self, filename=None, modelname=None, a_i = None):
+        """plot f against |k|"""
+        for a in self.data.data_dict:
+            if a_i is not None:
+                if a != list(self.data.data_dict)[a_i]:
+                    print('Skipping', a)
+                    continue
+            fig = plt.figure(figsize=(10,8))
+            ax = fig.add_subplot(111)
+            for band in self.data.data_dict[a]:
+                f = self.data.data_dict[a][band]['frequency']
+                kz = np.array(self.data.data_dict[a][band]['kz'])
+                k_rho = np.array(self.data.data_dict[a][band]['k_rho'])
+                k = np.sqrt(kz*kz + k_rho*k_rho)
+                ax.plot(k, f, color='black', marker='o', markersize=5)
+
+                if modelname is None: modelname = self.data.path
+                title = "Dispersion of Effective-medium Photonic Crystal\n"\
+                    + " (" + modelname + ")"
+                ax.set_title(title)
+                ax.set_xlabel(r"Magnitude of wavevector $k$ ($m^{-1}$)")
+                ax.set_ylabel(r"Angular Frequency $\omega$ ($s^-1$)")
+        if filename is not None:
+            fig.savefig(filename+'a_i-'+str(a_i)+'.png')
+            plt.close()
+        else:
+            plt.show()
 
     def compare_sio2(self, ratio=0.106, index="sio2", \
     filename=None, modelname=None, \
-    n_lim=None, roots=[None], bands=[None]):
+    n_lim=[1.04,1.07], roots=[None], bands=[None]):
         """Compare expected refractive index/Cherenkov angle from 
         Maxwell-Garnett formula to data from simulation. Analysis is valid
         INSIDE the crystal, so wavelength derived from k not c/f
@@ -306,12 +312,11 @@ class Analyze3D():
                     n_lim = global_min, global_max
                 ax.set_ylim(n_lim)
                 ax.set_xlim([200,600])  # Malitson SiO2 only valid from 200nm
-
+                if modelname is None:
+                    modelname = self.data.path
                 title = ("Effective Index Comparison Between Theory and "
-                        "Simulation for \n" + "(Band " + \
+                        "Simulation \n for " + modelname  + " (Band " + \
                         str(int(band)+1) + ")")
-                if modelname is not None:
-                    title += " (" + modelname + ")"
                 ax.set_title(title)
                 ax.set_xlabel(r"Wavelength $\lambda$ (nm)")
                 ax.set_ylabel(r"Refractive index $n_{eff}$")

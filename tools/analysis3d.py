@@ -10,11 +10,12 @@ from ckvpy.tools.analysis import dataAnalysis
 class dataAnalysis3D(dataAnalysis):
     """Data analysis class for 3D models, requires intersection of electron
     plane and dispersion to find cherenkov angle etc."""
-    def __init__(self, data):
+    def __init__(self, data, path):
         self.data_full = data  # includes full Brillouin zone data
         self.data_dict = {}  # same structure as in 2D case
         self._init_data_dict(data)
         self._get_num_bands()
+        self.path = path
         self.status = {
             'reflected': True,
             'interpolated': True,
@@ -28,7 +29,7 @@ class dataAnalysis3D(dataAnalysis):
             for band in self.data_full[root]:
                 self.data_dict[root][band] = {}
 
-    def calculateCherenkov(self, beta=0.999, direction = [1,0]):
+    def calculateCherenkov(self, beta=0.999, direction = [1,0], positive=True):
         """Find intersection of electron plane and dispersion to get
         Cherenkov behaviour
         Args:
@@ -88,7 +89,7 @@ class dataAnalysis3D(dataAnalysis):
                             "and dispersion plane,")
         self.status['intersected'] = True
         # self._rm_nan()  # remove NaNs # needs fixing for 3D case (add bands key)
-        self._comp_angle()
+        self._comp_angle(positive)
 
     def _cross(self, beta, kz, kz2, k_rho, k_rho2, f, fz2,
                f_rho2, direction):
@@ -165,7 +166,7 @@ class dataAnalysis3D(dataAnalysis):
         
         return rho_found, rho, z_found, z
 
-    def _comp_angle(self):
+    def _comp_angle(self, positive=True):
         """Find angles *outside* crystal using k-vectors."""
         # everything else hard-codes 'default', might change
         for root in self.data_dict:
@@ -192,8 +193,9 @@ class dataAnalysis3D(dataAnalysis):
 
                 self.data_dict[root][band]['wavelength'] = wl.tolist()
                 self.data_dict[root][band]['angle'] = theta.tolist()
-                self.wl_cut(root, band, wl_range=[0.,1000e-9],\
-                    sign=1, param_key='all', mutate=True)
+                if positive:
+                    self.wl_cut(root, band, wl_range=[0.,1000e-9],\
+                        sign=1, param_key='all', mutate=True)
                 self.calculate_n_eff()
                 # print(print(wl)
                 # print(f)
