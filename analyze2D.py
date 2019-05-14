@@ -183,7 +183,7 @@ class Analyze2D():
                     + r"$a=$" + a +" (" + modelname + ")"
             ax.set_title(title)
             ax.set_xlabel(r"Magnitude of wavevector $k$ ($m^{-1}$)")
-            ax.set_ylabel(r"Angular Frequency $\omega$ ($s^-1$)")
+            ax.set_ylabel(r"Frequency $f$ ($Hz$)")
             ax.legend()
         if filename is not None:
             fig.savefig(filename+'a_i-'+str(a_i)+'.png')

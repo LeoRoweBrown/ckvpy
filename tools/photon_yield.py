@@ -1,8 +1,9 @@
 import numpy as np
 from scipy.integrate import simps
 import scipy.constants as const
+import os
 
-def compute(theta_in, f, beta, L, n=None):
+def compute(theta_in, f, beta, L, n=None, qe="hpd", mirror1=0.9, mirror2=0.9):
     """compute number of photons due to Frank-Tamm and Fresen equations
     theta (ndarray/list[float]): Angles in chosen wavelength range
     f (ndarray/list[float]): Frequencies in chosen wavelength range
@@ -36,8 +37,15 @@ def compute(theta_in, f, beta, L, n=None):
     f_interp = np.linspace(np.min(f), np.max(f), num=30)
     theta_interp = np.interp(f_interp, f, theta_in)
     t_eff_interp = np.interp(f_interp, f, t_eff)
+    qe_file = os.path.join(os.path.dirname(__file__),\
+        "..\\qe\\"+ qe + ".txt")
+    print("Reading from", qe_file)
+    f_qe, qe = np.loadtxt(qe_file).T
+    qe_interp = np.interp(f_interp, f_qe, qe/100.)
+    print("Quantum efficiency", qe_interp)
     n_photons = \
         L*(const.fine_structure/(const.hbar*const.c))* \
-        simps(np.sin(theta_interp)**2.*t_eff_interp*const.h, x=f_interp)
+        simps(np.sin(theta_interp)**2.*t_eff_interp*qe_interp
+        *mirror1*mirror2*const.h, x=f_interp)
     print(n_photons, "photons")
     return n_photons

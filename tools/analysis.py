@@ -132,9 +132,11 @@ class dataAnalysis(object):
     def average_n(self, wl_range):
         """finds average n_mg and n_eff (from data) in given wavelength range
         TODO: test"""
-        for root in self.data_dict:
-            for band in self.data_dict[root]:
-                n_mg = self.data_dict[root][band]['n_mg']
+        for a in self.data_dict:
+            for band in self.data_dict[a]:
+                n_mg = self.data_dict[a][band]['n_mg']
+                wl_in = self.data_dict[a][band]['wl_in']
+                n_data = self.data_dict[a][band]['n_eff']
                 # find n where wl_range[0] < wavelength < wl_range[1]
                 for r in range(len(wl_range)): # lower and upper range e.g.
                                                # wl_range = [250e-9, 500.e-9]
@@ -165,9 +167,9 @@ class dataAnalysis(object):
                 n_data_av = np.mean(n_data[i1:i2])  # average n from data
                 n_mg_err = np.std(n_mg[i1:i2])/(i2-i1)**0.5  # standard error
                 n_data_err = np.std(n_data[i1:i2])/(i2-i1)**0.5
-                self.data.data_dict[a][band]['n_data_mean'] = \
+                self.data_dict[a][band]['n_data_mean'] = \
                     [n_data_av, n_data_err]
-                self.data.data_dict[a][band]['n_mg_mean'] = \
+                self.data_dict[a][band]['n_mg_mean'] = \
                     [n_mg_av, n_mg_err]
                 print('a:', a, 'band:', band, 'n_data', n_data_av, '+-', \
                     n_data_err)
@@ -295,7 +297,7 @@ class dataAnalysis(object):
                 # print(len(wl), len(self.data_dict[root][band][key]))
                 if w < wl_range[1] and w > wl_range[0] and sign*theta[i]>0:
                     # print("wavelength", w, w>wl_range[1])
-                    print(w)
+                    #print(w)
                     if n == 0: wl_nm_range.append(w)
                     param = self.data_dict[root][band][key][i]
                     param_nm_range.append(param)
@@ -340,6 +342,22 @@ class dataAnalysis(object):
         print(matrix)
         np.savetxt(filename, matrix)
 
+    def calculate_mg_yield(
+        self, beta=0.999, L=100.e-6, wl_range=[250.e-9, 500.e-9], nmg=1.04):
+        for root in self.data_dict:
+            for band in self.data_dict[root]:
+
+                f = self.data_dict[root][band]['frequency']
+                wl, theta = self.wl_cut(root, band, wl_range)
+                wl, f = self.wl_cut(root, band, wl_range, 
+                    param_key='frequency')
+                ones = np.ones_like(wl)
+                cos = np.arccos(1./(nmg*beta))
+                theta = ones*cos
+                n = np.ones_like(theta)*nmg
+                n_p = photon_yield.compute(theta, f, beta,
+                    L, n)
+
     def calculate_yield(
         self, beta=0.999, L=100.e-6, wl_range=[250.e-9, 500.e-9]):
         """Compute photon yield using Frank-Tamm theory and effective 
@@ -348,13 +366,15 @@ class dataAnalysis(object):
         # raise NotImplementedError
         for root in self.data_dict:
             for band in self.data_dict[root]:
-                theta = self.data_dict[root][band]['angle']
+                theta = self.data_dict[root][band]['th_in']
                 f = self.data_dict[root][band]['frequency']
                 wl, theta = self.wl_cut(root, band, wl_range)
-                wl, f = self.wl_cut(root, band, wl_range, 'frequency')
-                n = self.data_dict[root][band]['n_eff']
-                n_p = photon_yield.compute(theta=theta, f=f, beta=0.999,
-                                        L=L, n=n)
+                wl, f = self.wl_cut(root, band, wl_range, 
+                    param_key='frequency')
+                wl, n = self.wl_cut(root, band, wl_range,
+                    param_key='n_eff')
+                n_p = photon_yield.compute(theta, f, beta,
+                    L, n)
                 if 'yield' not in list(self.data_dict[root][band]):
                     self.data_dict[root][band]['yield'] = {
                         'range': [],
